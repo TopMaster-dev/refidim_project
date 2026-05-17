@@ -10,14 +10,19 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hapi/boom": "^10.0.1",
     "@refidim/database": "workspace:*",
     "@refidim/shared": "workspace:*",
+    "@whiskeysockets/baileys": "7.0.0-rc11",
     "bullmq": "^5.34.0",
+    "dotenv": "^17.4.2",
     "ioredis": "^5.4.2",
-    "pino": "^9.5.0"
+    "pino": "^9.14.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/qrcode": "^1.5.6",
     "pino-pretty": "^13.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

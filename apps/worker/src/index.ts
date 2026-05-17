@@ -1,30 +1,35 @@
+import "dotenv/config";
 import { logger } from "./logger.js";
-import { redisConnection } from "./queues.js";
+import { initRedis, shutdownRedis } from "./queues.js";
+import { startWhatsAppManager, stopWhatsAppManager } from "./whatsapp/manager.js";
+import { shutdownAllSessions } from "./whatsapp/service.js";
 
 async function bootstrap() {
-  logger.info("Refidim worker starting...");
+  logger.info("🚀 Refidim worker iniciando...");
 
-  // Verifica conexão Redis
-  await redisConnection.ping();
-  logger.info("✅ Redis connected");
+  // Redis é opcional — se não disponível, filas BullMQ ficam off
+  await initRedis();
 
-  // TODO Fase 4: registrar workers de WhatsApp (Baileys)
+  // WhatsApp manager: detecta sessões pendentes e reconecta
+  startWhatsAppManager();
+
   // TODO Fase 5: registrar workers de e-mail (SMTP/IMAP)
   // TODO Fase 6: registrar workers de IA (resposta + classificação)
   // TODO Fase 9: registrar worker de extrator (Playwright)
 
-  logger.info("Refidim worker ready. Awaiting jobs.");
+  logger.info("✅ Refidim worker pronto.");
 }
 
 bootstrap().catch((err) => {
-  logger.error({ err }, "Worker failed to start");
+  logger.error({ err }, "Worker falhou ao iniciar");
   process.exit(1);
 });
 
-// Graceful shutdown
 const shutdown = async (signal: string) => {
-  logger.info({ signal }, "Shutting down worker...");
-  await redisConnection.quit();
+  logger.info({ signal }, "🛑 Encerrando worker...");
+  stopWhatsAppManager();
+  await shutdownAllSessions();
+  await shutdownRedis();
   process.exit(0);
 };
 

@@ -1,13 +1,10 @@
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
+import { logger } from "./logger.js";
 
-export const redisConnection = new IORedis({
-  host: process.env.REDIS_HOST ?? "localhost",
-  port: Number(process.env.REDIS_PORT ?? 6379),
-  maxRetriesPerRequest: null,
-});
+let redisConnection: IORedis | null = null;
+let redisAvailable = false;
 
-// Filas — uma por tipo de trabalho assíncrono
 export const QUEUE_NAMES = {
   WHATSAPP_SEND: "whatsapp:send",
   EMAIL_SEND: "email:send",
@@ -16,22 +13,66 @@ export const QUEUE_NAMES = {
   EXTRACTION: "extraction:google",
 } as const;
 
-export const whatsAppSendQueue = new Queue(QUEUE_NAMES.WHATSAPP_SEND, {
-  connection: redisConnection,
-});
+const queues = new Map<string, Queue>();
 
-export const emailSendQueue = new Queue(QUEUE_NAMES.EMAIL_SEND, {
-  connection: redisConnection,
-});
+/**
+ * Tenta conectar ao Redis. Se falhar, marca como indisponível
+ * e o resto do worker continua rodando (com features de fila degradadas).
+ */
+export async function initRedis(): Promise<boolean> {
+  const host = process.env.REDIS_HOST ?? "localhost";
+  const port = Number(process.env.REDIS_PORT ?? 6379);
 
-export const aiReplyQueue = new Queue(QUEUE_NAMES.AI_REPLY, {
-  connection: redisConnection,
-});
+  try {
+    const conn = new IORedis({
+      host,
+      port,
+      maxRetriesPerRequest: null,
+      lazyConnect: true,
+      connectTimeout: 3000,
+      retryStrategy: () => null,
+    });
 
-export const aiClassifyQueue = new Queue(QUEUE_NAMES.AI_CLASSIFY, {
-  connection: redisConnection,
-});
+    // Silencia erros de conexão — vamos verificar via try/catch abaixo
+    conn.on("error", () => {});
 
-export const extractionQueue = new Queue(QUEUE_NAMES.EXTRACTION, {
-  connection: redisConnection,
-});
+    await conn.connect();
+    await conn.ping();
+    redisConnection = conn;
+    redisAvailable = true;
+    logger.info({ host, port }, "✅ Redis connected");
+    return true;
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message, host, port },
+      "⚠️  Redis indisponível — filas BullMQ desabilitadas. WhatsApp/Email funcionarão com scheduler in-process."
+    );
+    redisAvailable = false;
+    return false;
+  }
+}
+
+export function isRedisAvailable(): boolean {
+  return redisAvailable;
+}
+
+export function getQueue(name: keyof typeof QUEUE_NAMES): Queue | null {
+  if (!redisAvailable || !redisConnection) return null;
+  const qName = QUEUE_NAMES[name];
+  let q = queues.get(qName);
+  if (!q) {
+    q = new Queue(qName, { connection: redisConnection });
+    queues.set(qName, q);
+  }
+  return q;
+}
+
+export async function shutdownRedis() {
+  for (const q of queues.values()) {
+    await q.close();
+  }
+  if (redisConnection) {
+    await redisConnection.quit();
+    redisConnection = null;
+  }
+}
