@@ -4,6 +4,8 @@ import { initRedis, shutdownRedis } from "./queues.js";
 import { startWhatsAppManager, stopWhatsAppManager } from "./whatsapp/manager.js";
 import { shutdownAllSessions } from "./whatsapp/service.js";
 import { startEmailManager, stopEmailManager } from "./email/manager.js";
+import { startOpeningDispatcher, stopOpeningDispatcher } from "./ai/opener.js";
+import { hasAIProvider } from "./ai/provider.js";
 
 async function bootstrap() {
   logger.info("🚀 Refidim worker iniciando...");
@@ -17,7 +19,12 @@ async function bootstrap() {
   // Email manager: cuida das contas SMTP/IMAP ativas
   startEmailManager();
 
-  // TODO Fase 6: registrar workers de IA (resposta + classificação)
+  // Opening dispatcher: para trabalhos RUNNING, gera primeiras abordagens
+  if (hasAIProvider()) {
+    startOpeningDispatcher();
+  } else {
+    logger.warn("⚠️  AI_PROVIDER sem chave configurada — IA desativada (configure ANTHROPIC_API_KEY ou OPENAI_API_KEY)");
+  }
   // TODO Fase 9: registrar worker de extrator (Playwright)
 
   logger.info("✅ Refidim worker pronto.");
@@ -33,6 +40,7 @@ const shutdown = async (signal: string) => {
   stopWhatsAppManager();
   await shutdownAllSessions();
   await stopEmailManager();
+  stopOpeningDispatcher();
   await shutdownRedis();
   process.exit(0);
 };

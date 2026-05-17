@@ -10,6 +10,7 @@ import {
 } from "@refidim/database";
 import { decryptSecret, OPT_OUT_KEYWORDS } from "@refidim/shared";
 import { logger } from "../logger.js";
+import { generateAndSendReply } from "../ai/reply.js";
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -196,6 +197,7 @@ async function routeIncomingEmail(
     return;
   }
 
-  // (Fase 6) Aqui virá: enfileirar AI_REPLY
-  logger.info({ leadId: lead.id }, "E-mail armazenado — aguardando IA (Fase 6)");
+  generateAndSendReply(conversation.id).catch((err) =>
+    logger.error({ err, conversationId: conversation.id }, "Erro no reply IA")
+  );
 }

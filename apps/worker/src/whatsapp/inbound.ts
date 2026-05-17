@@ -1,7 +1,8 @@
 import type { WASocket, proto } from "@whiskeysockets/baileys";
 import { prisma, Channel, MessageDirection, MessageSender, LeadStatus } from "@refidim/database";
-import { OPT_OUT_KEYWORDS, OPT_OUT_NOTICE } from "@refidim/shared";
+import { OPT_OUT_KEYWORDS } from "@refidim/shared";
 import { logger } from "../logger.js";
+import { generateAndSendReply } from "../ai/reply.js";
 
 /**
  * Processa uma mensagem recebida via WhatsApp.
@@ -99,8 +100,10 @@ export async function handleIncomingMessage(
     return;
   }
 
-  // (Fase 6) Aqui virá: enfileirar AI_REPLY
-  logger.info({ leadId: lead.id }, "Mensagem armazenada — aguardando IA (Fase 6)");
+  // Dispara resposta da IA (assíncrono, não bloqueia)
+  generateAndSendReply(conversation.id).catch((err) =>
+    logger.error({ err, conversationId: conversation.id }, "Erro no reply IA")
+  );
 }
 
 function extractText(msg: proto.IWebMessageInfo): string | null {
