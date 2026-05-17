@@ -1,1 +1,47 @@
-docs
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# Env files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+prisma/migrations/dev/
+
+# WhatsApp sessions (Baileys auth)
+auth_info_*/
+.wwebjs_*
+
+# Uploaded files (dev)
+uploads/
+
+# docs (gerados localmente, não versionados)
+docs/

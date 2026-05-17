@@ -1,0 +1,26 @@
+{
+  "name": "refidim",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "db:generate": "pnpm --filter @refidim/database run generate",
+    "db:migrate": "pnpm --filter @refidim/database run migrate",
+    "db:studio": "pnpm --filter @refidim/database run studio",
+    "db:seed": "pnpm --filter @refidim/database run seed",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
