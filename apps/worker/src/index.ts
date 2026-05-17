@@ -6,6 +6,8 @@ import { shutdownAllSessions } from "./whatsapp/service.js";
 import { startEmailManager, stopEmailManager } from "./email/manager.js";
 import { startOpeningDispatcher, stopOpeningDispatcher } from "./ai/opener.js";
 import { hasAIProvider } from "./ai/provider.js";
+import { startHumanDispatcher, stopHumanDispatcher } from "./human-dispatcher.js";
+import { startExtractor, stopExtractor } from "./extractor/google-maps.js";
 
 async function bootstrap() {
   logger.info("🚀 Refidim worker iniciando...");
@@ -25,6 +27,12 @@ async function bootstrap() {
   } else {
     logger.warn("⚠️  AI_PROVIDER sem chave configurada — IA desativada (configure ANTHROPIC_API_KEY ou OPENAI_API_KEY)");
   }
+
+  // Human dispatcher: envia mensagens digitadas no painel
+  startHumanDispatcher();
+
+  // Extrator: processa ExtractionJobs na fila
+  startExtractor();
   // TODO Fase 9: registrar worker de extrator (Playwright)
 
   logger.info("✅ Refidim worker pronto.");
@@ -41,6 +49,8 @@ const shutdown = async (signal: string) => {
   await shutdownAllSessions();
   await stopEmailManager();
   stopOpeningDispatcher();
+  stopHumanDispatcher();
+  stopExtractor();
   await shutdownRedis();
   process.exit(0);
 };

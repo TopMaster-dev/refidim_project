@@ -3,6 +3,7 @@ import { prisma } from "@refidim/database";
 import { PLAN_CONFIGS } from "@refidim/shared";
 import { getCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: "Ativa",
@@ -18,23 +19,78 @@ export default async function DashboardPage() {
   const plan = user.subscription ? PLAN_CONFIGS[user.subscription.plan] : null;
   const sub = user.subscription;
 
-  // Métricas
-  const [consultantsCount, jobsCount, hotLeadsCount, warmLeadsCount] = await Promise.all([
+  // Métricas agregadas em paralelo
+  const [
+    consultantsCount,
+    jobsRunning,
+    leadCounts,
+    recentAlerts,
+    last7DaysMessages,
+    topJobs,
+  ] = await Promise.all([
     prisma.consultant.count({ where: { userId: user.id, isActive: true } }),
     prisma.job.count({ where: { userId: user.id, status: "RUNNING" } }),
-    prisma.lead.count({
-      where: { job: { userId: user.id }, status: "HOT" },
+    prisma.lead.groupBy({
+      by: ["status"],
+      where: { job: { userId: user.id } },
+      _count: true,
     }),
-    prisma.lead.count({
-      where: { job: { userId: user.id }, status: "WARM" },
+    prisma.alert.findMany({
+      where: { userId: user.id, isRead: false },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      include: { lead: { include: { contact: true } } },
+    }),
+    prisma.message.findMany({
+      where: {
+        sentAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        conversation: { lead: { job: { userId: user.id } } },
+      },
+      select: { sentAt: true, direction: true },
+    }),
+    prisma.job.findMany({
+      where: { userId: user.id, status: "RUNNING" },
+      include: {
+        leads: { where: { status: "HOT" }, select: { id: true } },
+        consultant: { select: { name: true } },
+      },
+      take: 5,
     }),
   ]);
 
+  const hotLeads = leadCounts.find((l) => l.status === "HOT")?._count ?? 0;
+  const warmLeads = leadCounts.find((l) => l.status === "WARM")?._count ?? 0;
+  const coldLeads = leadCounts.find((l) => l.status === "COLD")?._count ?? 0;
+  const handedOff = leadCounts.find((l) => l.status === "HANDED_OFF")?._count ?? 0;
+
+  // Histograma dos últimos 7 dias
+  const dailyCounts = Array.from({ length: 7 }, (_, i) => {
+    const day = new Date();
+    day.setDate(day.getDate() - (6 - i));
+    day.setHours(0, 0, 0, 0);
+    const next = new Date(day);
+    next.setDate(next.getDate() + 1);
+    const count = last7DaysMessages.filter(
+      (m) => m.sentAt >= day && m.sentAt < next
+    ).length;
+    return {
+      label: day.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", ""),
+      value: count,
+      iso: day.toISOString(),
+    };
+  });
+  const maxCount = Math.max(1, ...dailyCounts.map((d) => d.value));
+
   const usagePct = sub ? Math.round((sub.leadsUsed / sub.leadLimit) * 100) : 0;
+
+  // Top jobs ordenados por leads HOT
+  const sortedTopJobs = topJobs
+    .map((j) => ({ ...j, hotCount: j.leads.length }))
+    .sort((a, b) => b.hotCount - a.hotCount)
+    .slice(0, 3);
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Header */}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-navy-900">
@@ -62,26 +118,21 @@ export default async function DashboardPage() {
                   sub.status === "ACTIVE"
                     ? "rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700"
                     : sub.status === "TRIAL"
-                    ? "rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
-                    : "rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700"
+                      ? "rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
+                      : "rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700"
                 }
               >
                 {STATUS_LABELS[sub.status]}
               </span>
             </div>
-            <Link
-              href="/painel/conta"
-              className="text-sm font-medium text-brand-700 hover:text-brand-800"
-            >
+            <Link href="/painel/conta" className="text-sm font-medium text-brand-700 hover:text-brand-800">
               Gerenciar →
             </Link>
           </div>
 
           <div className="grid grid-cols-1 gap-4 px-6 py-5 sm:grid-cols-3">
             <div>
-              <p className="text-xs uppercase tracking-wide text-navy-500">
-                Leads do mês
-              </p>
+              <p className="text-xs uppercase tracking-wide text-navy-500">Leads do mês</p>
               <p className="mt-1 text-2xl font-bold text-navy-900">
                 {sub.leadsUsed.toLocaleString("pt-BR")}
                 <span className="ml-1 text-base font-normal text-navy-500">
@@ -97,72 +148,121 @@ export default async function DashboardPage() {
             </div>
             <Detail
               label="Consultores permitidos"
-              value={
-                plan.consultantLimit === 999
-                  ? "Ilimitados"
-                  : `${plan.consultantLimit}`
-              }
+              value={plan.consultantLimit === 999 ? "Ilimitados" : `${plan.consultantLimit}`}
             />
             <Detail
               label="Renovação em"
-              value={new Intl.DateTimeFormat("pt-BR", {
-                day: "2-digit",
-                month: "long",
-              }).format(sub.currentPeriodEnd)}
+              value={new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long" }).format(
+                sub.currentPeriodEnd
+              )}
             />
           </div>
         </div>
       )}
 
       {/* Métricas */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
-          label="Consultores ativos"
-          value={consultantsCount}
-          icon={<UsersIconSmall />}
-          accent="brand"
-        />
-        <StatCard
-          label="Trabalhos em execução"
-          value={jobsCount}
-          icon={<PlayIconSmall />}
-          accent="brand"
-        />
-        <StatCard
-          label="Leads mornos"
-          value={warmLeadsCount}
-          icon={<FlameSmallIcon />}
-          accent="yellow"
-        />
-        <StatCard
-          label="Leads quentes"
-          value={hotLeadsCount}
-          icon={<FlameSmallIcon />}
-          accent="red"
-        />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <StatCard label="Consultores ativos" value={consultantsCount} accent="brand" />
+        <StatCard label="Trabalhos rodando" value={jobsRunning} accent="brand" />
+        <StatCard label="Leads frios" value={coldLeads} accent="gray" />
+        <StatCard label="Leads mornos" value={warmLeads} accent="yellow" />
+        <StatCard label="Leads quentes" value={hotLeads} accent="red" badge={hotLeads > 0} />
       </div>
 
-      {/* Quick actions */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <QuickAction
-          href="/painel/consultores/novo"
-          title="Criar consultor"
-          desc="Configure tom, objetivo e permissões"
-          icon={<UsersIconSmall />}
-        />
-        <QuickAction
-          href="/painel/listas/nova"
-          title="Importar lista"
-          desc="Upload CSV ou cole contatos manualmente"
-          icon={<UploadIcon />}
-        />
-        <QuickAction
-          href="/painel/trabalhos/novo"
-          title="Iniciar trabalho"
-          desc="Combine consultor + lista para prospectar"
-          icon={<PlayIconSmall />}
-        />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Atividade da semana */}
+        <section className="lg:col-span-2 rounded-2xl border border-navy-100 bg-white p-6 shadow-soft">
+          <header className="flex items-center justify-between">
+            <h2 className="font-semibold text-navy-900">Mensagens nos últimos 7 dias</h2>
+            <span className="text-sm text-navy-500">
+              {last7DaysMessages.length} no total
+            </span>
+          </header>
+
+          <div className="mt-6 grid grid-cols-7 gap-2">
+            {dailyCounts.map((d) => {
+              const h = Math.max(8, (d.value / maxCount) * 160);
+              return (
+                <div key={d.iso} className="flex flex-col items-center gap-2">
+                  <div className="flex h-40 w-full items-end">
+                    <div
+                      className="w-full rounded-t-md bg-brand-gradient transition-all hover:opacity-90"
+                      style={{ height: `${h}px` }}
+                      title={`${d.value} mensagens`}
+                    />
+                  </div>
+                  <p className="text-xs font-medium text-navy-700">{d.label}</p>
+                  <p className="text-xs text-navy-500">{d.value}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Alertas recentes */}
+        <section className="rounded-2xl border border-navy-100 bg-white p-6 shadow-soft">
+          <header className="flex items-center justify-between">
+            <h2 className="font-semibold text-navy-900">Alertas não lidos</h2>
+            {recentAlerts.length > 0 && (
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+                {recentAlerts.length}
+              </span>
+            )}
+          </header>
+
+          {recentAlerts.length === 0 ? (
+            <p className="mt-4 text-sm text-navy-500">Nenhum alerta no momento ✨</p>
+          ) : (
+            <ul className="mt-4 space-y-3">
+              {recentAlerts.map((a) => (
+                <li key={a.id}>
+                  <Link
+                    href={`/painel/leads/${a.leadId}`}
+                    className="block rounded-xl border border-red-200 bg-red-50 p-3 hover:bg-red-100"
+                  >
+                    <p className="text-sm font-semibold text-red-900">
+                      🚨 {a.lead.contact.name ?? a.lead.contact.phone ?? a.lead.contact.email}
+                    </p>
+                    <p className="mt-1 text-xs text-red-700">{a.message}</p>
+                    <p className="mt-1 text-xs text-red-600/70">{formatDate(a.createdAt)}</p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
+
+      {/* Top trabalhos */}
+      {sortedTopJobs.length > 0 && (
+        <section className="rounded-2xl border border-navy-100 bg-white p-6 shadow-soft">
+          <header className="flex items-center justify-between">
+            <h2 className="font-semibold text-navy-900">Trabalhos com mais oportunidades</h2>
+            <Link href="/painel/trabalhos" className="text-sm font-medium text-brand-700 hover:text-brand-800">
+              Ver todos →
+            </Link>
+          </header>
+
+          <ul className="mt-4 divide-y divide-navy-50">
+            {sortedTopJobs.map((j) => (
+              <li key={j.id}>
+                <Link
+                  href={`/painel/trabalhos/${j.id}`}
+                  className="flex items-center justify-between py-3 hover:bg-navy-50/30"
+                >
+                  <div>
+                    <p className="font-medium text-navy-900">{j.name}</p>
+                    <p className="text-sm text-navy-500">{j.consultant.name}</p>
+                  </div>
+                  <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">
+                    {j.hotCount} {j.hotCount === 1 ? "quente" : "quentes"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Empty hint */}
       {consultantsCount === 0 && (
@@ -194,88 +294,31 @@ function Detail({ label, value }: { label: string; value: string }) {
 function StatCard({
   label,
   value,
-  icon,
   accent,
+  badge,
 }: {
   label: string;
   value: number;
-  icon: React.ReactNode;
-  accent: "brand" | "yellow" | "red";
+  accent: "brand" | "yellow" | "red" | "gray";
+  badge?: boolean;
 }) {
   const accents = {
-    brand: "bg-brand-50 text-brand-700",
-    yellow: "bg-yellow-50 text-yellow-700",
-    red: "bg-red-50 text-red-700",
+    brand: "border-brand-200",
+    yellow: "border-yellow-300",
+    red: "border-red-300",
+    gray: "border-navy-200",
   };
   return (
-    <div className="rounded-2xl border border-navy-100 bg-white p-5 shadow-soft transition-shadow hover:shadow-elevated">
+    <div
+      className={`rounded-2xl border-t-4 ${accents[accent]} bg-white p-5 shadow-soft transition-shadow hover:shadow-elevated`}
+    >
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-navy-600">{label}</p>
-        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${accents[accent]}`}>
-          {icon}
-        </div>
+        {badge && (
+          <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+        )}
       </div>
       <p className="mt-3 text-3xl font-bold text-navy-900">{value}</p>
     </div>
-  );
-}
-
-function QuickAction({
-  href,
-  title,
-  desc,
-  icon,
-}: {
-  href: string;
-  title: string;
-  desc: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group flex items-start gap-3 rounded-2xl border border-navy-100 bg-white p-5 shadow-soft transition-all hover:shadow-elevated hover:-translate-y-0.5"
-    >
-      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-gradient text-white shadow-brand">
-        {icon}
-      </div>
-      <div>
-        <p className="font-semibold text-navy-900 group-hover:text-brand-700">{title}</p>
-        <p className="mt-1 text-sm text-navy-600">{desc}</p>
-      </div>
-    </Link>
-  );
-}
-
-// Mini icons
-function UsersIconSmall() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-    </svg>
-  );
-}
-function PlayIconSmall() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-      <polygon points="5 3 19 12 5 21 5 3" />
-    </svg>
-  );
-}
-function FlameSmallIcon() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2s4 4 4 8a4 4 0 1 1-8 0c0-2 1-3 1-3s2 1 2 3a2 2 0 0 0 4 0c0-2-3-5-3-8z" />
-    </svg>
-  );
-}
-function UploadIcon() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
   );
 }

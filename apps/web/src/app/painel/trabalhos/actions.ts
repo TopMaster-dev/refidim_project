@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma, JobStatus } from "@refidim/database";
 import { jobSchema } from "@refidim/shared";
 import { getCurrentUser } from "@/lib/auth";
+import { requirePaidSubscription } from "@/lib/subscription";
 
 type Result = { error?: string; ok?: boolean; jobId?: string };
 
@@ -16,6 +17,7 @@ async function requireUser() {
 
 export async function createJobAction(formData: FormData): Promise<Result> {
   const user = await requireUser();
+  requirePaidSubscription(user.subscription);
 
   const parsed = jobSchema.safeParse({
     name: formData.get("name"),
@@ -56,6 +58,7 @@ export async function createJobAction(formData: FormData): Promise<Result> {
 
 export async function startJobAction(jobId: string) {
   const user = await requireUser();
+  requirePaidSubscription(user.subscription);
   const job = await prisma.job.findFirst({
     where: { id: jobId, userId: user.id },
     include: { contactList: { include: { _count: { select: { contacts: true } } } } },

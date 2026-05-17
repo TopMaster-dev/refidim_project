@@ -23,9 +23,11 @@ const SECONDARY = [
 export function PainelSidebar({
   userName,
   userEmail,
+  unreadAlerts,
 }: {
   userName: string;
   userEmail: string;
+  unreadAlerts: number;
 }) {
   const pathname = usePathname();
 
@@ -45,6 +47,7 @@ export function PainelSidebar({
             active={
               item.exact ? pathname === item.href : pathname.startsWith(item.href)
             }
+            badge={item.href === "/painel/leads" && unreadAlerts > 0 ? unreadAlerts : undefined}
           />
         ))}
 
@@ -95,11 +98,13 @@ function NavItem({
   label,
   icon: Icon,
   active,
+  badge,
 }: {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   active: boolean;
+  badge?: number;
 }) {
   return (
     <Link
@@ -117,7 +122,12 @@ function NavItem({
           active ? "text-brand-600" : "text-navy-400 group-hover:text-navy-600"
         )}
       />
-      {label}
+      <span className="flex-1">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </Link>
   );
 }
