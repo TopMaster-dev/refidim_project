@@ -21,44 +21,43 @@ export default function CadastroPage() {
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-5">
-      {/* Brand panel */}
-      <aside className="relative hidden overflow-hidden bg-brand-gradient text-white lg:col-span-2 lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-brand-300/20 blur-3xl" />
+      <aside className="relative hidden overflow-hidden bg-slate-950 text-white lg:col-span-2 lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(59,130,246,0.25),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(96,165,250,0.18),transparent_55%)]" />
+        <div className="absolute inset-0 bg-grid opacity-[0.03]" />
 
         <Logo variant="full" size="md" href="/" className="relative invert" />
 
-        <div className="relative space-y-6">
-          <h2 className="text-3xl font-semibold leading-snug">
+        <div className="relative space-y-7 max-w-md">
+          <h2 className="text-3xl font-semibold leading-snug tracking-tight">
             Comece a prospectar com IA em minutos
           </h2>
           <ul className="space-y-3">
             {BENEFITS.map((b) => (
-              <li key={b} className="flex items-center gap-3 text-brand-50">
+              <li key={b} className="flex items-center gap-3 text-slate-200">
                 <CheckCircle />
-                <span>{b}</span>
+                <span className="text-[15px]">{b}</span>
               </li>
             ))}
           </ul>
         </div>
 
-        <p className="relative text-xs text-brand-100/70">
-          © {new Date().getFullYear()} Refidim
+        <p className="relative text-xs text-slate-500">
+          © {new Date().getFullYear()} Refidim · refidim.com.br
         </p>
       </aside>
 
-      {/* Form */}
       <main className="flex min-h-screen items-center justify-center bg-white p-6 lg:col-span-3">
         <div className="w-full max-w-md animate-slide-up">
-          <div className="lg:hidden">
+          <div className="lg:hidden mb-10">
             <Logo variant="full" size="md" />
           </div>
 
-          <div className="mt-8 lg:mt-0">
-            <h1 className="text-3xl font-bold tracking-tight text-navy-900">
-              Crie sua conta
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+              Criar sua conta
             </h1>
-            <p className="mt-2 text-navy-600">
+            <p className="mt-2 text-slate-600">
               7 dias grátis para testar — sem cartão de crédito.
             </p>
           </div>
@@ -71,7 +70,7 @@ export default function CadastroPage() {
                 if (r?.error) setError(r.error);
               });
             }}
-            className="mt-8 space-y-5"
+            className="mt-10 space-y-5"
           >
             <div className="space-y-2">
               <Label htmlFor="name">Nome completo</Label>
@@ -80,24 +79,14 @@ export default function CadastroPage() {
 
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                required
-                autoComplete="email"
-              />
+              <Input id="email" name="email" type="email" required autoComplete="email" />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="phone">WhatsApp (opcional)</Label>
-              <Input
-                id="phone"
-                name="phone"
-                type="tel"
-                placeholder="+55 11 99999-9999"
-                autoComplete="tel"
-              />
+              <Label htmlFor="phone">
+                WhatsApp <span className="font-normal text-slate-400">(opcional)</span>
+              </Label>
+              <Input id="phone" name="phone" type="tel" placeholder="+55 11 99999-9999" autoComplete="tel" />
             </div>
 
             <div className="space-y-2">
@@ -110,32 +99,23 @@ export default function CadastroPage() {
                 minLength={8}
                 autoComplete="new-password"
               />
-              <p className="text-xs text-navy-500">Mínimo 8 caracteres</p>
+              <p className="text-xs text-slate-500">Mínimo 8 caracteres</p>
             </div>
 
             {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-2.5 text-sm text-danger-700">
                 {error}
               </div>
             )}
 
-            <Button
-              type="submit"
-              variant="gradient"
-              size="lg"
-              className="w-full"
-              disabled={isPending}
-            >
-              {isPending ? "Criando conta..." : "Criar conta grátis"}
+            <Button type="submit" variant="primary" size="lg" className="w-full" disabled={isPending}>
+              {isPending ? "Criando conta…" : "Criar conta grátis"}
             </Button>
           </form>
 
-          <p className="mt-8 text-center text-sm text-navy-600">
+          <p className="mt-8 text-center text-sm text-slate-600">
             Já tem conta?{" "}
-            <Link
-              href="/login"
-              className="font-semibold text-brand-700 hover:text-brand-800"
-            >
+            <Link href="/login" className="font-semibold text-brand-700 hover:text-brand-800">
               Entrar
             </Link>
           </p>
@@ -147,12 +127,8 @@ export default function CadastroPage() {
 
 function CheckCircle() {
   return (
-    <svg className="h-5 w-5 flex-shrink-0 text-brand-200" viewBox="0 0 20 20" fill="currentColor">
-      <path
-        fillRule="evenodd"
-        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-        clipRule="evenodd"
-      />
+    <svg className="h-5 w-5 flex-shrink-0 text-brand-400" viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
     </svg>
   );
 }

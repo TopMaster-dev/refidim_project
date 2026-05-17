@@ -2,20 +2,24 @@ import Link from "next/link";
 import { prisma } from "@refidim/database";
 import { getCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatDate } from "@/lib/utils";
-
-const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-700",
-  RUNNING: "bg-green-100 text-green-700",
-  PAUSED: "bg-yellow-100 text-yellow-800",
-  COMPLETED: "bg-blue-100 text-blue-700",
-};
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Rascunho",
   RUNNING: "Em execução",
   PAUSED: "Pausado",
   COMPLETED: "Concluído",
+};
+
+const STATUS_VARIANTS: Record<string, "neutral" | "success" | "warning" | "brand"> = {
+  DRAFT: "neutral",
+  RUNNING: "success",
+  PAUSED: "warning",
+  COMPLETED: "brand",
 };
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -38,77 +42,69 @@ export default async function TrabalhosPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Trabalhos</h1>
-          <p className="text-gray-600">
-            {jobs.length} {jobs.length === 1 ? "campanha" : "campanhas"}
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/painel/trabalhos/novo">+ Novo trabalho</Link>
-        </Button>
-      </header>
+    <div className="space-y-6 animate-fade-in">
+      <PageHeader
+        title="Trabalhos"
+        description={`${jobs.length} ${jobs.length === 1 ? "campanha" : "campanhas"} no total`}
+        actions={
+          <Button asChild variant="primary">
+            <Link href="/painel/trabalhos/novo">+ Novo trabalho</Link>
+          </Button>
+        }
+      />
 
       {jobs.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-12 text-center">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Nenhum trabalho ainda
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Combine um consultor com uma lista para começar uma campanha.
-          </p>
-          <Button asChild className="mt-6">
-            <Link href="/painel/trabalhos/novo">Criar primeiro trabalho</Link>
-          </Button>
-        </div>
+        <EmptyState
+          icon={<BriefcaseIcon />}
+          title="Nenhum trabalho ainda"
+          description="Combine um consultor com uma lista de contatos para iniciar uma campanha de prospecção."
+          action={
+            <Button asChild variant="primary">
+              <Link href="/painel/trabalhos/novo">Criar primeiro trabalho</Link>
+            </Button>
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {jobs.map((j) => {
             const cold = j.leads.filter((l) => l.status === "COLD").length;
             const warm = j.leads.filter((l) => l.status === "WARM").length;
             const hot = j.leads.filter((l) => l.status === "HOT").length;
+            const handed = j.leads.filter((l) => l.status === "HANDED_OFF").length;
 
             return (
               <Link
                 key={j.id}
                 href={`/painel/trabalhos/${j.id}`}
-                className="block rounded-lg border border-gray-200 bg-white p-5 transition-shadow hover:shadow-md"
+                className="group block rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-slate-300 hover:shadow-md"
               >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{j.name}</h3>
-                    <p className="mt-1 text-sm text-gray-600">
-                      {j.consultant.name} → {j.contactList.name}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-slate-900 group-hover:text-brand-700">{j.name}</h3>
+                    <p className="mt-1 text-sm text-slate-500 truncate">
+                      <span className="text-slate-700">{j.consultant.name}</span>
+                      {" → "}
+                      <span>{j.contactList.name}</span>
                     </p>
                   </div>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      STATUS_STYLES[j.status]
-                    }`}
-                  >
+                  <Badge variant={STATUS_VARIANTS[j.status]} dot>
                     {STATUS_LABELS[j.status]}
-                  </span>
+                  </Badge>
                 </div>
 
-                <div className="mt-4 flex items-center gap-4 text-sm">
-                  <span className="text-gray-500">{CHANNEL_LABELS[j.channel]}</span>
-                  <span className="text-gray-300">•</span>
-                  <span className="text-gray-500">
-                    {j.leads.length} leads
-                  </span>
+                <div className="mt-4 flex flex-wrap items-center gap-2 text-2xs">
+                  <Badge variant="outline" size="sm">{CHANNEL_LABELS[j.channel]}</Badge>
+                  <Badge variant="outline" size="sm">{j.leads.length} leads</Badge>
                 </div>
 
-                <div className="mt-3 flex gap-2 text-xs">
-                  <Pill label="Frios" value={cold} color="gray" />
-                  <Pill label="Mornos" value={warm} color="yellow" />
-                  <Pill label="Quentes" value={hot} color="red" />
+                <div className="mt-4 grid grid-cols-4 gap-2 rounded-lg bg-slate-50 p-3">
+                  <Mini label="Frios" value={cold} />
+                  <Mini label="Mornos" value={warm} accent="warning" />
+                  <Mini label="Quentes" value={hot} accent="danger" />
+                  <Mini label="Assumidos" value={handed} accent="brand" />
                 </div>
 
-                <p className="mt-3 text-xs text-gray-400">
-                  Criado em {formatDate(j.createdAt)}
-                </p>
+                <p className="mt-3 text-2xs text-slate-400">Criado em {formatDate(j.createdAt)}</p>
               </Link>
             );
           })}
@@ -118,23 +114,34 @@ export default async function TrabalhosPage() {
   );
 }
 
-function Pill({
+function Mini({
   label,
   value,
-  color,
+  accent,
 }: {
   label: string;
   value: number;
-  color: "gray" | "yellow" | "red";
+  accent?: "warning" | "danger" | "brand";
 }) {
   const colors = {
-    gray: "bg-gray-100 text-gray-700",
-    yellow: "bg-yellow-100 text-yellow-700",
-    red: "bg-red-100 text-red-700",
+    default: "text-slate-700",
+    warning: "text-warning-700",
+    danger: "text-danger-700",
+    brand: "text-brand-700",
   };
   return (
-    <span className={`rounded px-2 py-0.5 ${colors[color]}`}>
-      {label}: <strong>{value}</strong>
-    </span>
+    <div className="text-center">
+      <p className={`text-base font-bold tabular ${colors[accent ?? "default"]}`}>{value}</p>
+      <p className="text-2xs uppercase tracking-wide text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+function BriefcaseIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="7" width="20" height="14" rx="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    </svg>
   );
 }

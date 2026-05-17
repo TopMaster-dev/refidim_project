@@ -3,14 +3,11 @@
 import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { connectWhatsAppAction, disconnectWhatsAppAction } from "./actions";
 
-type Status =
-  | "DISCONNECTED"
-  | "CONNECTING"
-  | "QR_PENDING"
-  | "CONNECTED"
-  | "BANNED";
+type Status = "DISCONNECTED" | "CONNECTING" | "QR_PENDING" | "CONNECTED" | "BANNED";
 
 interface SessionData {
   status: Status;
@@ -19,32 +16,12 @@ interface SessionData {
   lastConnectedAt: Date | string | null;
 }
 
-const STATUS_CONFIG: Record<Status, { label: string; tone: string; dot: string }> = {
-  DISCONNECTED: {
-    label: "Desconectado",
-    tone: "bg-navy-100 text-navy-700",
-    dot: "bg-navy-400",
-  },
-  CONNECTING: {
-    label: "Conectando…",
-    tone: "bg-blue-50 text-blue-700",
-    dot: "bg-blue-500 animate-pulse",
-  },
-  QR_PENDING: {
-    label: "Aguardando QR",
-    tone: "bg-yellow-50 text-yellow-700",
-    dot: "bg-yellow-500 animate-pulse",
-  },
-  CONNECTED: {
-    label: "Conectado",
-    tone: "bg-green-50 text-green-700",
-    dot: "bg-green-500",
-  },
-  BANNED: {
-    label: "Bloqueado pelo WhatsApp",
-    tone: "bg-red-50 text-red-700",
-    dot: "bg-red-500",
-  },
+const STATUS_BADGE: Record<Status, { label: string; variant: "neutral" | "brand" | "warning" | "success" | "danger" }> = {
+  DISCONNECTED: { label: "Desconectado", variant: "neutral" },
+  CONNECTING: { label: "Conectando", variant: "brand" },
+  QR_PENDING: { label: "Aguardando QR", variant: "warning" },
+  CONNECTED: { label: "Conectado", variant: "success" },
+  BANNED: { label: "Bloqueado", variant: "danger" },
 };
 
 export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
@@ -53,53 +30,43 @@ export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
   );
   const [isPending, startTransition] = useTransition();
 
-  // Polling de status quando estiver conectando ou aguardando QR
   useEffect(() => {
     const polling = ["CONNECTING", "QR_PENDING"].includes(session.status);
     if (!polling) return;
-
     const id = setInterval(async () => {
       try {
         const res = await fetch("/api/whatsapp/status", { cache: "no-store" });
-        if (res.ok) {
-          const data = (await res.json()) as SessionData;
-          setSession(data);
-        }
-      } catch {
-        // ignora
-      }
+        if (res.ok) setSession((await res.json()) as SessionData);
+      } catch {}
     }, 2000);
-
     return () => clearInterval(id);
   }, [session.status]);
 
-  const cfg = STATUS_CONFIG[session.status];
+  const cfg = STATUS_BADGE[session.status];
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-navy-100 bg-white shadow-soft">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-navy-100 px-6 py-5">
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100 text-green-700">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success-50 text-success-600">
             <WhatsAppIcon />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-navy-900">WhatsApp</h2>
-            <p className="text-sm text-navy-600">
+            <CardTitle>WhatsApp</CardTitle>
+            <p className="mt-0.5 text-sm text-slate-500">
               {session.phoneNumber
                 ? `Conectado como +${session.phoneNumber}`
-                : "Conecte um número para começar"}
+                : "Conecte um número aquecido para começar"}
             </p>
           </div>
         </div>
 
-        <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${cfg.tone}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+        <Badge variant={cfg.variant} dot>
           {cfg.label}
-        </div>
-      </header>
+        </Badge>
+      </CardHeader>
 
-      <div className="px-6 py-6">
-        {/* Estados */}
+      <CardContent>
         {session.status === "DISCONNECTED" && (
           <Disconnected
             pending={isPending}
@@ -148,39 +115,44 @@ export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
         )}
 
         {session.status === "BANNED" && <Banned />}
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
-// ---------- Sub-estados ----------
-
 function Disconnected({ pending, onConnect }: { pending: boolean; onConnect: () => void }) {
   return (
-    <div className="text-center">
-      <p className="text-navy-700">
-        Clique abaixo para gerar um QR Code e conectar seu número.
-      </p>
-      <ul className="mx-auto mt-4 max-w-md space-y-1 text-left text-sm text-navy-600">
-        <li>• Use um número aquecido (uso normal há semanas)</li>
-        <li>• O envio respeita a janela 7h-22h e intervalos humanos (25-90s)</li>
-        <li>• Mensagens de opt-out param o bot automaticamente</li>
-      </ul>
-      <Button variant="gradient" size="lg" className="mt-6" onClick={onConnect} disabled={pending}>
-        {pending ? "Iniciando…" : "Conectar WhatsApp"}
-      </Button>
+    <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-2">
+      <div>
+        <h3 className="text-lg font-semibold text-slate-900">Conecte seu WhatsApp</h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Vamos gerar um QR Code para você escanear com o WhatsApp do número que vai usar para prospectar.
+        </p>
+        <ul className="mt-4 space-y-2 text-sm text-slate-700">
+          <Item>Use um número aquecido (uso normal há semanas)</Item>
+          <Item>Janela de envio: 7h às 22h</Item>
+          <Item>Intervalo humano entre mensagens: 25 a 90s</Item>
+          <Item>Opt-out automático para palavras como "sair", "parar"</Item>
+        </ul>
+        <Button variant="primary" size="lg" className="mt-6" onClick={onConnect} disabled={pending}>
+          {pending ? "Iniciando…" : "Conectar WhatsApp"}
+        </Button>
+      </div>
+      <div className="hidden md:flex items-center justify-center">
+        <div className="flex h-48 w-48 items-center justify-center rounded-2xl bg-slate-50 border border-dashed border-slate-200">
+          <QRPlaceholder />
+        </div>
+      </div>
     </div>
   );
 }
 
 function Connecting() {
   return (
-    <div className="flex flex-col items-center gap-3 py-8">
+    <div className="flex flex-col items-center justify-center gap-3 py-10">
       <Spinner />
-      <p className="text-navy-600">Inicializando sessão com o WhatsApp…</p>
-      <p className="text-xs text-navy-500">
-        Isso pode levar até 30 segundos. O worker precisa estar rodando (<code>pnpm dev</code>).
-      </p>
+      <p className="text-sm font-medium text-slate-700">Inicializando sessão com o WhatsApp…</p>
+      <p className="text-xs text-slate-500">Isso pode levar até 30 segundos.</p>
     </div>
   );
 }
@@ -189,39 +161,27 @@ function QRPending({ qrDataUrl, onCancel }: { qrDataUrl: string; onCancel: () =>
   return (
     <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-2">
       <div className="flex flex-col items-center">
-        <div className="rounded-2xl border border-navy-200 bg-white p-4 shadow-soft">
-          <Image
-            src={qrDataUrl}
-            alt="QR Code WhatsApp"
-            width={280}
-            height={280}
-            unoptimized
-          />
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-md">
+          <Image src={qrDataUrl} alt="QR Code WhatsApp" width={280} height={280} unoptimized />
         </div>
-        <button
-          onClick={onCancel}
-          className="mt-4 text-sm text-navy-500 hover:text-navy-700"
-        >
+        <Button variant="ghost" size="sm" className="mt-3" onClick={onCancel}>
           Cancelar
-        </button>
+        </Button>
       </div>
-
       <div>
-        <h3 className="text-lg font-semibold text-navy-900">
-          Escaneie com seu WhatsApp
-        </h3>
-        <ol className="mt-4 space-y-3 text-sm text-navy-700">
+        <h3 className="text-lg font-semibold text-slate-900">Escaneie com seu WhatsApp</h3>
+        <ol className="mt-5 space-y-3 text-sm text-slate-700">
           <Step n={1}>Abra o WhatsApp no celular</Step>
           <Step n={2}>
-            Toque em <strong>Mais opções</strong> ⋮ → <strong>Aparelhos conectados</strong>
+            Toque em <strong>Mais opções ⋮</strong> → <strong>Aparelhos conectados</strong>
           </Step>
           <Step n={3}>
             Toque em <strong>Conectar aparelho</strong>
           </Step>
-          <Step n={4}>Aponte a câmera para este QR Code</Step>
+          <Step n={4}>Aponte a câmera para este QR</Step>
         </ol>
-        <p className="mt-4 text-xs text-navy-500">
-          O QR muda automaticamente a cada ~60s. Esta tela atualiza sozinha.
+        <p className="mt-5 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          ⏱ O QR muda automaticamente a cada ~60s. Esta tela atualiza sozinha.
         </p>
       </div>
     </div>
@@ -242,19 +202,17 @@ function Connected({
   onLogout: () => void;
 }) {
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl bg-green-50 p-4">
-        <p className="text-sm text-green-800">
-          ✅ Tudo certo. Seu WhatsApp <strong>+{phoneNumber}</strong> está pronto para
-          enviar e receber mensagens. As regras de janela (7h-22h) e delay humano (25-90s)
-          são aplicadas automaticamente.
+    <div className="space-y-5">
+      <div className="rounded-xl bg-success-50 border border-success-100 p-4">
+        <p className="text-sm text-success-800">
+          ✓ Tudo certo. Seu WhatsApp <strong>+{phoneNumber}</strong> está pronto para enviar e
+          receber mensagens. Janela 7h-22h e delay 25-90s aplicados automaticamente.
         </p>
       </div>
 
       {lastConnectedAt && (
-        <p className="text-xs text-navy-500">
-          Conectado desde{" "}
-          {new Intl.DateTimeFormat("pt-BR", {
+        <p className="text-xs text-slate-500">
+          Conectado desde {new Intl.DateTimeFormat("pt-BR", {
             day: "2-digit",
             month: "long",
             hour: "2-digit",
@@ -263,7 +221,7 @@ function Connected({
         </p>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button variant="outline" onClick={onDisconnect} disabled={pending}>
           Desconectar (manter sessão)
         </Button>
@@ -277,20 +235,37 @@ function Connected({
 
 function Banned() {
   return (
-    <div className="rounded-xl bg-red-50 p-4 text-sm text-red-800">
+    <div className="rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-900">
       <p className="font-semibold">Este número foi bloqueado pelo WhatsApp.</p>
       <p className="mt-1">
-        Limpe a sessão e use outro número. Para reduzir risco no futuro: use número aquecido,
-        respeite delays e evite envios em massa idênticos.
+        Limpe a sessão e use outro número. Para reduzir risco: use número aquecido, respeite delays
+        e evite envios em massa idênticos.
       </p>
     </div>
+  );
+}
+
+function Item({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2">
+      <CheckIcon />
+      <span>{children}</span>
+    </li>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-success-500" viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M16.704 5.296a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.296-7.296a1 1 0 011.414 0z" clipRule="evenodd" />
+    </svg>
   );
 }
 
 function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (
     <li className="flex items-start gap-3">
-      <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-gradient text-xs font-semibold text-white">
+      <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-slate-900 text-2xs font-bold text-white">
         {n}
       </span>
       <span>{children}</span>
@@ -303,6 +278,20 @@ function Spinner() {
     <svg className="h-8 w-8 animate-spin text-brand-600" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
       <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function QRPlaceholder() {
+  return (
+    <svg className="h-20 w-20 text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="4" height="4" />
+      <rect x="14" y="19" width="2" height="2" />
+      <rect x="19" y="14" width="2" height="4" />
+      <rect x="17" y="17" width="4" height="2" />
     </svg>
   );
 }

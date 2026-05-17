@@ -1,5 +1,6 @@
 import { prisma } from "@refidim/database";
 import { getCurrentUser } from "@/lib/auth";
+import { PageHeader } from "@/components/ui/page-header";
 import { WhatsAppPanel } from "./whatsapp-panel";
 import { EmailPanel } from "./email-panel";
 
@@ -12,17 +13,11 @@ export default async function CanaisPage() {
   const [whatsapp, emailAccounts, consultants] = await Promise.all([
     prisma.whatsAppSession.findUnique({
       where: { userId: user.id },
-      select: {
-        status: true,
-        qrCode: true,
-        phoneNumber: true,
-        lastConnectedAt: true,
-      },
+      select: { status: true, qrCode: true, phoneNumber: true, lastConnectedAt: true },
     }),
     prisma.emailAccount.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
-      // Omite senhas explicitamente
       select: {
         id: true,
         userId: true,
@@ -49,15 +44,12 @@ export default async function CanaisPage() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight text-navy-900">Canais</h1>
-        <p className="mt-1 text-navy-600">
-          Conecte WhatsApp e e-mail para que o Refidim possa abordar seus contatos.
-        </p>
-      </header>
+      <PageHeader
+        title="Canais"
+        description="Conecte WhatsApp e e-mail para o Refidim abordar seus contatos."
+      />
 
       <WhatsAppPanel initial={whatsapp} />
-
       <EmailPanel accounts={emailAccounts} consultants={consultants} />
     </div>
   );

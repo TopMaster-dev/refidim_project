@@ -16,14 +16,14 @@ export default async function PainelLayout({
   });
 
   return (
-    <div className="min-h-screen bg-navy-50/40">
+    <div className="min-h-screen bg-slate-50">
       <PainelSidebar
         userName={user.name}
         userEmail={user.email}
         unreadAlerts={unreadAlerts}
       />
       <main className="ml-64 min-h-screen">
-        <div className="mx-auto max-w-7xl px-8 py-8">{children}</div>
+        <div className="mx-auto max-w-7xl px-8 py-8 lg:px-10 lg:py-10">{children}</div>
       </main>
     </div>
   );

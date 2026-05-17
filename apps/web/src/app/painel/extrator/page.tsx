@@ -1,5 +1,6 @@
 import { prisma } from "@refidim/database";
 import { getCurrentUser } from "@/lib/auth";
+import { PageHeader } from "@/components/ui/page-header";
 import { ExtractorForm } from "./extractor-form";
 import { ExtractionsList } from "./extractions-list";
 
@@ -17,16 +18,12 @@ export default async function ExtractorPage() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight text-navy-900">Extrator</h1>
-        <p className="mt-1 text-navy-600">
-          Encontre leads no Google Maps por segmento e cidade. Os contatos públicos
-          (telefone, site) viram uma lista pronta para usar em campanhas.
-        </p>
-      </header>
+      <PageHeader
+        title="Extrator Google"
+        description="Encontre leads no Google Maps por segmento e cidade. Contatos públicos viram lista pronta."
+      />
 
       <ExtractorForm />
-
       <ExtractionsList jobs={jobs} />
     </div>
   );

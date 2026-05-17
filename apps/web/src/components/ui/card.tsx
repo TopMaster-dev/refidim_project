@@ -6,7 +6,7 @@ export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
     <div
       ref={ref}
       className={cn(
-        "rounded-xl border border-navy-100 bg-white shadow-soft",
+        "rounded-xl border border-slate-200 bg-white shadow-sm",
         className
       )}
       {...props}
@@ -19,7 +19,7 @@ export const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivEleme
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("border-b border-navy-100 px-6 py-4", className)}
+      className={cn("flex flex-col gap-1 px-6 py-5 border-b border-slate-100", className)}
       {...props}
     />
   )
@@ -30,7 +30,7 @@ export const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadi
   ({ className, ...props }, ref) => (
     <h3
       ref={ref}
-      className={cn("font-semibold text-navy-900", className)}
+      className={cn("text-base font-semibold text-slate-900 tracking-tight", className)}
       {...props}
     />
   )
@@ -41,7 +41,7 @@ export const CardDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<H
   ({ className, ...props }, ref) => (
     <p
       ref={ref}
-      className={cn("mt-1 text-sm text-navy-600", className)}
+      className={cn("text-sm text-slate-500", className)}
       {...props}
     />
   )
@@ -59,10 +59,7 @@ export const CardFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivEleme
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn(
-        "border-t border-navy-100 px-6 py-4",
-        className
-      )}
+      className={cn("flex items-center px-6 py-4 border-t border-slate-100 bg-slate-25", className)}
       {...props}
     />
   )

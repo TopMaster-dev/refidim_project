@@ -15,39 +15,44 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-5">
       {/* Painel esquerdo — brand */}
-      <aside className="relative hidden overflow-hidden bg-brand-gradient text-white lg:col-span-2 lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-brand-300/20 blur-3xl" />
+      <aside className="relative hidden overflow-hidden bg-slate-950 text-white lg:col-span-2 lg:flex lg:flex-col lg:justify-between lg:p-12">
+        {/* Gradient ornamentos */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(59,130,246,0.25),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(96,165,250,0.18),transparent_55%)]" />
+        <div className="absolute inset-0 bg-grid opacity-[0.03]" />
 
         <Logo variant="full" size="md" href="/" className="relative invert" />
 
-        <div className="relative space-y-6">
-          <p className="text-3xl font-semibold leading-snug">
+        <div className="relative space-y-7 max-w-md">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium backdrop-blur">
+            <span className="h-1.5 w-1.5 rounded-full bg-success-500" />
+            <span className="text-slate-200">Bem-vindo de volta</span>
+          </div>
+          <p className="text-3xl font-semibold leading-snug tracking-tight">
             "Pare de perder lead quente por falta de tempo."
           </p>
-          <div className="flex items-center gap-3 text-sm text-brand-100">
-            <span className="h-1.5 w-1.5 rounded-full bg-brand-200" />
-            Acesse seu painel e veja seus leads
-          </div>
+          <p className="text-base text-slate-400">
+            Acesse seu painel para ver leads quentes, alertas e conversas ativas.
+          </p>
         </div>
 
-        <p className="relative text-xs text-brand-100/70">
-          © {new Date().getFullYear()} Refidim
+        <p className="relative text-xs text-slate-500">
+          © {new Date().getFullYear()} Refidim · refidim.com.br
         </p>
       </aside>
 
       {/* Painel direito — form */}
       <main className="flex min-h-screen items-center justify-center bg-white p-6 lg:col-span-3">
         <div className="w-full max-w-md animate-slide-up">
-          <div className="lg:hidden">
+          <div className="lg:hidden mb-10">
             <Logo variant="full" size="md" />
           </div>
 
-          <div className="mt-8 lg:mt-0">
-            <h1 className="text-3xl font-bold tracking-tight text-navy-900">
-              Bem-vindo de volta
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+              Entrar na sua conta
             </h1>
-            <p className="mt-2 text-navy-600">Acesse sua conta para continuar.</p>
+            <p className="mt-2 text-slate-600">Acesse o painel para continuar.</p>
           </div>
 
           <form
@@ -58,7 +63,7 @@ export default function LoginPage() {
                 if (r?.error) setError(r.error);
               });
             }}
-            className="mt-8 space-y-5"
+            className="mt-10 space-y-5"
           >
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
@@ -73,7 +78,12 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Senha</Label>
+                <Link href="#" className="text-xs font-medium text-brand-700 hover:text-brand-800">
+                  Esqueci a senha
+                </Link>
+              </div>
               <Input
                 id="password"
                 name="password"
@@ -84,28 +94,19 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-lg border border-danger-200 bg-danger-50 px-3.5 py-2.5 text-sm text-danger-700">
                 {error}
               </div>
             )}
 
-            <Button
-              type="submit"
-              variant="gradient"
-              size="lg"
-              className="w-full"
-              disabled={isPending}
-            >
-              {isPending ? "Entrando..." : "Entrar"}
+            <Button type="submit" variant="primary" size="lg" className="w-full" disabled={isPending}>
+              {isPending ? "Entrando…" : "Entrar"}
             </Button>
           </form>
 
-          <p className="mt-8 text-center text-sm text-navy-600">
+          <p className="mt-8 text-center text-sm text-slate-600">
             Não tem conta?{" "}
-            <Link
-              href="/cadastro"
-              className="font-semibold text-brand-700 hover:text-brand-800"
-            >
+            <Link href="/cadastro" className="font-semibold text-brand-700 hover:text-brand-800">
               Criar conta grátis
             </Link>
           </p>
