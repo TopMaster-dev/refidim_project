@@ -3,6 +3,7 @@ import { logger } from "./logger.js";
 import { initRedis, shutdownRedis } from "./queues.js";
 import { startWhatsAppManager, stopWhatsAppManager } from "./whatsapp/manager.js";
 import { shutdownAllSessions } from "./whatsapp/service.js";
+import { startEmailManager, stopEmailManager } from "./email/manager.js";
 
 async function bootstrap() {
   logger.info("🚀 Refidim worker iniciando...");
@@ -13,7 +14,9 @@ async function bootstrap() {
   // WhatsApp manager: detecta sessões pendentes e reconecta
   startWhatsAppManager();
 
-  // TODO Fase 5: registrar workers de e-mail (SMTP/IMAP)
+  // Email manager: cuida das contas SMTP/IMAP ativas
+  startEmailManager();
+
   // TODO Fase 6: registrar workers de IA (resposta + classificação)
   // TODO Fase 9: registrar worker de extrator (Playwright)
 
@@ -29,6 +32,7 @@ const shutdown = async (signal: string) => {
   logger.info({ signal }, "🛑 Encerrando worker...");
   stopWhatsAppManager();
   await shutdownAllSessions();
+  await stopEmailManager();
   await shutdownRedis();
   process.exit(0);
 };

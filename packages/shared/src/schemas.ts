@@ -83,6 +83,22 @@ export const jobSchema = z.object({
 });
 export type JobInput = z.infer<typeof jobSchema>;
 
+// Conta de e-mail (SMTP + IMAP)
+export const emailAccountSchema = z.object({
+  fromEmail: z.string().email("E-mail inválido"),
+  fromName: z.string().min(2, "Nome muito curto"),
+  smtpHost: z.string().min(2),
+  smtpPort: z.coerce.number().int().min(1).max(65535),
+  smtpUser: z.string().min(1),
+  smtpPass: z.string().min(1),
+  imapHost: z.string().optional(),
+  imapPort: z.coerce.number().int().min(1).max(65535).optional(),
+  imapUser: z.string().optional(),
+  imapPass: z.string().optional(),
+  consultantId: z.string().cuid().optional(),
+});
+export type EmailAccountInput = z.infer<typeof emailAccountSchema>;
+
 // Classificação de lead (saída estruturada da IA)
 export const leadClassificationSchema = z.object({
   status: z.enum(["COLD", "WARM", "HOT"]),
