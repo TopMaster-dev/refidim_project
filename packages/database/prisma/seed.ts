@@ -1,23 +1,21 @@
+import "dotenv/config";
 import { PrismaClient, PlanTier, SubscriptionStatus, ConsultantGoal, ConversationTone } from "@prisma/client";
-import { createHash } from "node:crypto";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
-
-// Hash simples só para seed. Auth real usa bcrypt.
-function devHash(pw: string) {
-  return createHash("sha256").update(pw).digest("hex");
-}
 
 async function main() {
   console.log("🌱 Seeding Refidim development data...");
 
+  const passwordHash = await bcrypt.hash("refidim123", 12);
+
   const user = await prisma.user.upsert({
     where: { email: "admin@refidim.com.br" },
-    update: {},
+    update: { passwordHash },
     create: {
       email: "admin@refidim.com.br",
       name: "Admin Refidim",
-      passwordHash: devHash("refidim123"),
+      passwordHash,
       phone: "+5511999999999",
     },
   });

@@ -16,6 +16,9 @@ build/
 .env.local
 .env.*.local
 !.env.example
+packages/*/.env
+apps/*/.env
+apps/*/.env.local
 
 # Logs
 *.log

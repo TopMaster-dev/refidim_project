@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64" fill="none">
+  <defs>
+    <linearGradient id="rGradFull" x1="8" y1="6" x2="44" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#60A5FA"/>
+      <stop offset="0.55" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#0F1B3D"/>
+    </linearGradient>
+  </defs>
+  <path
+    d="M14 6 H34 C42.8 6 50 13.2 50 22 C50 30.8 42.8 38 34 38 H28 L46 58 H30 L14 38 V6 Z M22 14 V30 H34 C38.4 30 42 26.4 42 22 C42 17.6 38.4 14 34 14 H22 Z"
+    fill="url(#rGradFull)"
+  />
+  <path
+    d="M14 58 Q 4 50 8 38 L 14 38 Z"
+    fill="#1D4ED8"
+    opacity="0.85"
+  />
+  <text
+    x="70"
+    y="44"
+    font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif"
+    font-size="34"
+    font-weight="700"
+    fill="#0F1B3D"
+    letter-spacing="-0.5"
+  >Refidim</text>
+</svg>
