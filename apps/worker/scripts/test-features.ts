@@ -460,103 +460,50 @@ async function testSubscriptionGate() {
 }
 
 async function testWebhookHandler() {
-  group("Webhook NextGo Pay");
+  group("Webhook Stripe");
+  const hasSecret = !!process.env.STRIPE_WEBHOOK_SECRET;
 
-  const adminUser = await prisma.user.findUnique({
-    where: { email: "admin@refidim.com.br" },
+  await test("Endpoint /api/webhooks/stripe existe (rota não 404)", async () => {
+    const r = await fetch("http://localhost:3000/api/webhooks/stripe", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    return r.status !== 404 || "rota não encontrada";
   });
-  if (!adminUser) {
-    console.log("  \x1b[33m⚠\x1b[0m admin não encontrado, pulando webhook");
-    return;
+
+  await test(
+    hasSecret
+      ? "POST sem stripe-signature → 401"
+      : "POST sem secret configurado → 500 (esperado em dev)",
+    async () => {
+      const r = await fetch("http://localhost:3000/api/webhooks/stripe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "checkout.session.completed" }),
+      });
+      const expected = hasSecret ? 401 : 500;
+      return r.status === expected || `status ${r.status} (esperado ${expected})`;
+    }
+  );
+
+  if (hasSecret) {
+    await test("POST com signature inválida → 401", async () => {
+      const r = await fetch("http://localhost:3000/api/webhooks/stripe", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "stripe-signature": "t=123,v1=invalida",
+        },
+        body: JSON.stringify({ type: "checkout.session.completed" }),
+      });
+      return r.status === 401 || `status ${r.status}`;
+    });
+  } else {
+    console.log(
+      "  \x1b[33m⚠\x1b[0m signature validation test pulado (STRIPE_WEBHOOK_SECRET ausente em dev)"
+    );
   }
-
-  // Limpa pagamentos antigos de teste
-  await prisma.payment.deleteMany({
-    where: {
-      userId: adminUser.id,
-      nextGoPaymentId: { startsWith: "auto-test-" },
-    },
-  });
-
-  const paymentId = `auto-test-${Date.now()}`;
-
-  await test("POST webhook payment.paid → 200", async () => {
-    const r = await fetch("http://localhost:3000/api/webhooks/nextgo", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        event: "payment.paid",
-        payment_id: paymentId,
-        user_email: "admin@refidim.com.br",
-        amount: 197,
-        paid_at: new Date().toISOString(),
-        description: "Test Pro mensal",
-      }),
-    });
-    return r.status === 200 || `status ${r.status}`;
-  });
-
-  await test("Payment criado no banco", async () => {
-    const p = await prisma.payment.findUnique({
-      where: { nextGoPaymentId: paymentId },
-    });
-    return p?.status === "PAID" || `status ${p?.status}`;
-  });
-
-  await test("Subscription virou ACTIVE", async () => {
-    const sub = await prisma.subscription.findFirst({
-      where: { userId: adminUser.id },
-    });
-    return sub?.status === "ACTIVE" || `got ${sub?.status}`;
-  });
-
-  // Testa overdue
-  const overdueId = `auto-test-overdue-${Date.now()}`;
-  await test("POST webhook payment.overdue → 200", async () => {
-    const r = await fetch("http://localhost:3000/api/webhooks/nextgo", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        event: "payment.overdue",
-        payment_id: overdueId,
-        user_email: "admin@refidim.com.br",
-        amount: 197,
-        due_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      }),
-    });
-    return r.status === 200 || `status ${r.status}`;
-  });
-
-  await test("Subscription virou PAST_DUE após overdue", async () => {
-    const sub = await prisma.subscription.findFirst({
-      where: { userId: adminUser.id },
-    });
-    return sub?.status === "PAST_DUE" || `got ${sub?.status}`;
-  });
-
-  await test("POST webhook sem JSON válido → 400", async () => {
-    const r = await fetch("http://localhost:3000/api/webhooks/nextgo", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "not json",
-    });
-    return r.status === 400 || `status ${r.status}`;
-  });
-
-  // Restaura subscription para não bagunçar testes manuais
-  await prisma.subscription.updateMany({
-    where: { userId: adminUser.id },
-    data: {
-      status: SubscriptionStatus.ACTIVE,
-      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    },
-  });
-  await prisma.payment.deleteMany({
-    where: {
-      userId: adminUser.id,
-      nextGoPaymentId: { startsWith: "auto-test-" },
-    },
-  });
 }
 
 async function testHttpRoutes() {

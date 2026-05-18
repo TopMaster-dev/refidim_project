@@ -2,11 +2,12 @@ import { prisma } from "@refidim/database";
 import { PLAN_CONFIGS, ALL_PLANS } from "@refidim/shared";
 import { getCurrentUser } from "@/lib/auth";
 import { canUsePaidFeatures } from "@/lib/subscription";
-import { Button } from "@/components/ui/button";
+import { hasStripe } from "@/lib/stripe";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatBRL, formatDate } from "@/lib/utils";
+import { PlanActions } from "./plan-actions";
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: "Ativa",
@@ -39,7 +40,7 @@ const PAYMENT_VARIANT: Record<string, "success" | "warning" | "danger" | "neutra
 };
 
 interface PageProps {
-  searchParams: Promise<{ reason?: string }>;
+  searchParams: Promise<{ reason?: string; status?: string }>;
 }
 
 export default async function ContaPage({ searchParams }: PageProps) {
@@ -48,6 +49,7 @@ export default async function ContaPage({ searchParams }: PageProps) {
 
   const sp = await searchParams;
   const blocked = sp.reason === "payment";
+  const successFromCheckout = sp.status === "success";
 
   const payments = await prisma.payment.findMany({
     where: { userId: user.id },
@@ -58,6 +60,8 @@ export default async function ContaPage({ searchParams }: PageProps) {
   const plan = user.subscription ? PLAN_CONFIGS[user.subscription.plan] : null;
   const sub = user.subscription;
   const canUse = canUsePaidFeatures(sub);
+  const stripeConfigured = hasStripe();
+  const hasStripeCustomer = !!user.stripeCustomerId;
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -66,14 +70,31 @@ export default async function ContaPage({ searchParams }: PageProps) {
         description="Gerencie sua assinatura e veja o histórico de pagamentos."
       />
 
-      {blocked && !canUse && (
-        <div className="rounded-xl border border-danger-200 bg-danger-50 p-5 text-sm text-danger-900">
-          <p className="font-semibold">Sua assinatura precisa ser regularizada para continuar.</p>
-          <p className="mt-1 text-danger-700">Regularize o pagamento ou troque de plano abaixo para liberar suas operações.</p>
+      {successFromCheckout && (
+        <div className="rounded-xl border border-success-200 bg-success-50 p-5 text-sm text-success-900">
+          <p className="font-semibold">✓ Pagamento confirmado.</p>
+          <p className="mt-1 text-success-700">
+            Sua assinatura está ativa. Pode levar alguns segundos para o status aparecer abaixo.
+          </p>
         </div>
       )}
 
-      {/* Plano atual em destaque */}
+      {blocked && !canUse && (
+        <div className="rounded-xl border border-danger-200 bg-danger-50 p-5 text-sm text-danger-900">
+          <p className="font-semibold">Sua assinatura precisa ser regularizada para continuar.</p>
+          <p className="mt-1 text-danger-700">Regularize o pagamento ou troque de plano abaixo.</p>
+        </div>
+      )}
+
+      {!stripeConfigured && (
+        <div className="rounded-xl border border-warning-200 bg-warning-50 p-5 text-sm text-warning-900">
+          <p className="font-semibold">⚠ Stripe não está configurado.</p>
+          <p className="mt-1 text-warning-700">
+            Defina <code>STRIPE_SECRET_KEY</code> e os <code>STRIPE_PRICE_*</code> no <code>.env</code> para ativar checkout.
+          </p>
+        </div>
+      )}
+
       {plan && sub && (
         <Card className="overflow-hidden">
           <div className="bg-slate-950 px-6 py-5 text-white">
@@ -92,14 +113,26 @@ export default async function ContaPage({ searchParams }: PageProps) {
           </div>
 
           <div className="grid grid-cols-1 gap-6 px-6 py-5 sm:grid-cols-3">
-            <Detail label="Leads usados / total" value={`${sub.leadsUsed.toLocaleString("pt-BR")} / ${plan.leadLimit.toLocaleString("pt-BR")}`} />
-            <Detail label="Consultores" value={plan.consultantLimit === 999 ? "Ilimitados" : `${plan.consultantLimit}`} />
+            <Detail
+              label="Leads usados / total"
+              value={`${sub.leadsUsed.toLocaleString("pt-BR")} / ${plan.leadLimit.toLocaleString("pt-BR")}`}
+            />
+            <Detail
+              label="Consultores"
+              value={plan.consultantLimit === 999 ? "Ilimitados" : `${plan.consultantLimit}`}
+            />
             <Detail label="Renovação" value={formatDate(sub.currentPeriodEnd)} />
           </div>
+
+          {hasStripeCustomer && (
+            <div className="border-t border-slate-100 bg-slate-25 px-6 py-3 text-sm text-slate-600 flex items-center justify-between gap-3">
+              <span>Gerenciar método de pagamento, baixar faturas ou cancelar:</span>
+              <PlanActions action="portal" />
+            </div>
+          )}
         </Card>
       )}
 
-      {/* Faturas */}
       <Card className="overflow-hidden p-0">
         <CardHeader>
           <CardTitle>Faturas</CardTitle>
@@ -135,12 +168,11 @@ export default async function ContaPage({ searchParams }: PageProps) {
         )}
       </Card>
 
-      {/* Trocar plano */}
       <section>
         <div className="mb-5">
           <h2 className="text-xl font-bold tracking-tight text-slate-900">Trocar de plano</h2>
           <p className="mt-1 text-sm text-slate-500">
-            A troca é processada pelo NextGo Pay. Você será redirecionado para concluir.
+            O pagamento é processado pelo Stripe (cartão internacional). Você será redirecionado para concluir.
           </p>
         </div>
 
@@ -170,17 +202,9 @@ export default async function ContaPage({ searchParams }: PageProps) {
                   <Item>{p.leadLimit.toLocaleString("pt-BR")} leads/mês</Item>
                   <Item>{p.consultantLimit === 999 ? "Consultores ilimitados" : `${p.consultantLimit} consultor(es)`}</Item>
                 </ul>
-                <Button asChild variant={current ? "outline" : "primary"} size="lg" className="mt-6 w-full" disabled={current}>
-                  <a
-                    href={
-                      process.env.NEXT_PUBLIC_NEXTGO_CHECKOUT_URL
-                        ? `${process.env.NEXT_PUBLIC_NEXTGO_CHECKOUT_URL}?plan=${p.tier.toLowerCase()}&email=${encodeURIComponent(user.email)}`
-                        : "#"
-                    }
-                  >
-                    {current ? "Plano atual" : "Trocar"}
-                  </a>
-                </Button>
+                <div className="mt-6">
+                  <PlanActions action="checkout" plan={p.tier} disabled={current} disabledLabel="Plano atual" />
+                </div>
               </div>
             );
           })}
@@ -203,7 +227,11 @@ function Item({ children }: { children: React.ReactNode }) {
   return (
     <li className="flex items-start gap-2">
       <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-success-500" viewBox="0 0 20 20" fill="currentColor">
-        <path fillRule="evenodd" d="M16.704 5.296a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.296-7.296a1 1 0 011.414 0z" clipRule="evenodd" />
+        <path
+          fillRule="evenodd"
+          d="M16.704 5.296a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.296-7.296a1 1 0 011.414 0z"
+          clipRule="evenodd"
+        />
       </svg>
       {children}
     </li>

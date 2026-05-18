@@ -9,7 +9,9 @@ export default async function PainelLayout({
   children: React.ReactNode;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  // Se cookie existe mas user sumiu (DB resetado, etc.), vai pelo /api/auth/clear
+  // pra apagar o cookie e evitar loop com o middleware.
+  if (!user) redirect("/api/auth/clear");
 
   const unreadAlerts = await prisma.alert.count({
     where: { userId: user.id, isRead: false },
