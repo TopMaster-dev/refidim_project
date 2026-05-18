@@ -128,6 +128,21 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
     }
   }
 
+  // Few-shot examples — exemplos REAIS que ensinam tom
+  const refMessages =
+    (context?.referenceMessages as Array<{ scenario: string; message: string; lesson: string }> | null) ?? [];
+  if (refMessages.length > 0) {
+    parts.push("");
+    parts.push("# Exemplos do tom ideal (estudar e imitar o estilo, não copiar literalmente)");
+    parts.push("Cada exemplo abaixo mostra um CENÁRIO, uma MENSAGEM modelo e a LIÇÃO que ela ensina:");
+    for (const ex of refMessages) {
+      parts.push("");
+      parts.push(`Cenário: ${ex.scenario}`);
+      parts.push(`Mensagem: "${ex.message}"`);
+      parts.push(`Por que funciona: ${ex.lesson}`);
+    }
+  }
+
   // Proibições absolutas — vem por último para reforçar
   if (context?.forbiddenActions?.length) {
     parts.push("");

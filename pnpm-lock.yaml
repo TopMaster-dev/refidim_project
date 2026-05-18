@@ -147,6 +147,9 @@ importers:
       '@whiskeysockets/baileys':
         specifier: 7.0.0-rc11
         version: 7.0.0-rc11(sharp@0.33.5)
+      bcryptjs:
+        specifier: ^2.4.3
+        version: 2.4.3
       bullmq:
         specifier: ^5.34.0
         version: 5.76.9

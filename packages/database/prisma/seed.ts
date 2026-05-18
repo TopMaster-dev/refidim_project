@@ -51,10 +51,7 @@ async function main() {
     },
   });
 
-  await prisma.businessContext.upsert({
-    where: { consultantId: consultant.id },
-    update: {},
-    create: {
+  const businessContextData = {
       consultantId: consultant.id,
       whatYouSell:
         "Plataforma de prospecção via WhatsApp e e-mail com IA que conversa de forma humana e identifica leads quentes.",
@@ -102,7 +99,49 @@ async function main() {
         "Dizer que ganha clientes automaticamente",
         "Usar linguagem de spam ou pressão exagerada",
       ],
-    },
+      // Few-shot examples derivados dos prints reais do cliente — ensinam TOM.
+      referenceMessages: [
+        {
+          scenario: "Abertura ultra-curta confirmando contato",
+          message: "Boa tarde! É da [empresa do contato]?",
+          lesson:
+            "Aberturas podem ser uma única pergunta curta para confirmar que está falando com a empresa certa. Sem apresentação, sem pitch.",
+        },
+        {
+          scenario: "Abertura pedindo direcionamento (em vez de empurrar)",
+          message:
+            "Boa tarde! Poderia me direcionar para o responsável da [empresa]? Agradeço desde já!",
+          lesson:
+            "Quando não sabemos quem é o decisor, abordamos pedindo ajuda em vez de empurrar oferta. Tom humilde.",
+        },
+        {
+          scenario: "Follow-up gentil após silêncio",
+          message:
+            "Bom dia [nome], mandando novamente para caso não tenha visto a última mensagem. Estou falando com a pessoa certa?",
+          lesson:
+            "Follow-up sem pressão: assume boa fé ('caso não tenha visto') e repete o ponto principal em 1 linha. Nunca cobra.",
+        },
+        {
+          scenario: "Apresentação curta após primeiro engajamento",
+          message:
+            "[Nome], obrigado pelo retorno e peço desculpas se gerou confusão. Sou o [seu nome] da [empresa]. Nossa plataforma ajuda [o que faz em 1 frase]. Vocês ou os clientes de vocês têm o problema X? A gente costuma ajudar [exemplos de quem atende] e, se fizer sentido pra vocês, posso enviar uma apresentação para avaliarem sem compromisso.",
+          lesson:
+            "Apresentação ideal: agradece + se identifica + 1 frase do produto + pergunta qualificadora + dá exemplo de quem atende + oferece material 'sem compromisso'. NUNCA promete resultado.",
+        },
+        {
+          scenario: "Reação respeitosa a um 'não'",
+          message:
+            "[Nome], obrigado por responder. Respeito totalmente o seu 'não'. Se puder, gostaria de entender: o que fez não fazer sentido para vocês? Abraço.",
+          lesson:
+            "Quando o lead recusa, NUNCA insistir. Agradece + respeita explicitamente + pede feedback aberto + encerra com 'abraço'. Pode virar morno em outro momento.",
+        },
+      ],
+  };
+
+  await prisma.businessContext.upsert({
+    where: { consultantId: consultant.id },
+    update: businessContextData,
+    create: businessContextData,
   });
 
   await prisma.consultantPermission.upsert({

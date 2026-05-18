@@ -41,6 +41,15 @@ export const businessContextSchema = z.object({
   glossaryAllowed: z.array(z.string()).default([]),
   glossaryBlocked: z.array(z.string()).default([]),
   forbiddenActions: z.array(z.string()).default([]),
+  referenceMessages: z
+    .array(
+      z.object({
+        scenario: z.string().min(2),
+        message: z.string().min(5),
+        lesson: z.string().min(5),
+      })
+    )
+    .default([]),
 });
 export type BusinessContextInput = z.infer<typeof businessContextSchema>;
 

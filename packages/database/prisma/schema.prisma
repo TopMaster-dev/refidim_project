@@ -135,6 +135,7 @@ model BusinessContext {
   glossaryAllowed String[] // termos que pode usar
   glossaryBlocked String[] // termos proibidos
   forbiddenActions String[] // lista de proibições
+  referenceMessages Json   @default("[]") // [{ scenario, message, lesson }] — few-shot para IA
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
