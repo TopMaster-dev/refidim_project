@@ -41,6 +41,10 @@ export async function startImapForAccount(account: EmailAccount): Promise<void> 
       pass: decryptSecret(account.imapPassEnc),
     },
     logger: false,
+    // 90s: socket sem atividade por 90s é considerado morto. Ocasiona um
+    // reconnect periódico, mas garante que sockets travados sejam detectados
+    // rápido — sem isso, e-mails novos podem ficar invisíveis indefinidamente.
+    socketTimeout: 90_000,
   });
 
   try {
@@ -53,11 +57,52 @@ export async function startImapForAccount(account: EmailAccount): Promise<void> 
     return;
   }
 
+  client.on("error", (err) => {
+    logger.error({ err, accountId: account.id }, "IMAP socket error");
+    const c = connections.get(account.id);
+    if (c) {
+      clearInterval(c.interval);
+      connections.delete(account.id);
+    }
+  });
+
+  let running = false;
+  let runningSince = 0;
+  const STUCK_THRESHOLD_MS = 2 * 60 * 1000;
+
   const tick = async () => {
+    // Watchdog: se um tick está rodando há mais de 2min sem terminar,
+    // o socket provavelmente está pendurado sem dar erro. Força reconnect.
+    if (running && Date.now() - runningSince > STUCK_THRESHOLD_MS) {
+      logger.warn(
+        { accountId: account.id, stuckMs: Date.now() - runningSince },
+        "IMAP tick pendurado — forçando reconnect"
+      );
+      const c = connections.get(account.id);
+      if (c) {
+        clearInterval(c.interval);
+        connections.delete(account.id);
+      }
+      try {
+        client.close();
+      } catch {
+        // ignora
+      }
+      return;
+    }
+    if (running) return;
+    running = true;
+    runningSince = Date.now();
     try {
       await checkNewMessages(account, client);
     } catch (err) {
-      logger.error({ err, accountId: account.id }, "Erro no IMAP poll");
+      // "Connection not available" é eco do socket já morto — já logamos como
+      // "IMAP socket error". Evita ruído duplicado.
+      if ((err as { code?: string })?.code !== "NoConnection") {
+        logger.error({ err, accountId: account.id }, "Erro no IMAP poll");
+      }
+    } finally {
+      running = false;
     }
   };
 
