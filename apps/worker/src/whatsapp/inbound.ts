@@ -27,10 +27,45 @@ export async function handleIncomingMessage(
   // Ignora grupos e broadcast
   if (remoteJid.endsWith("@g.us") || remoteJid.includes("broadcast")) return;
 
-  // Extrai número
-  const phoneRaw = remoteJid.split("@")[0]?.split(":")[0];
-  if (!phoneRaw) return;
-  const phoneE164 = `+${phoneRaw}`;
+  // Resolução de telefone — ordem de prioridade:
+  // 1. key.senderPn ou participantPn (algumas versões expõem direto)
+  // 2. key.remoteJidAlt (Baileys retorna o JID telefônico real quando remote é LID)
+  // 3. remoteJid (formato tradicional 5511999@s.whatsapp.net, se não for LID)
+  //
+  // WhatsApp Multi-Device usa LIDs (@lid) — números longos opacos como
+  // 96856562487496 que NÃO são telefones.
+  const keyAny = msg.key as proto.IMessageKey & {
+    senderPn?: string | null;
+    participantPn?: string | null;
+    remoteJidAlt?: string | null;
+  };
+  const phoneJid =
+    keyAny.senderPn ?? keyAny.participantPn ?? keyAny.remoteJidAlt ?? null;
+
+  let phoneRaw: string | undefined;
+  if (phoneJid) {
+    // remoteJidAlt vem como "817091202775@s.whatsapp.net" — extrai a parte numérica
+    phoneRaw = phoneJid.split("@")[0]?.split(":")[0];
+  } else if (!remoteJid.endsWith("@lid")) {
+    // Só use remoteJid direto se NÃO for LID
+    phoneRaw = remoteJid.split("@")[0]?.split(":")[0];
+  }
+
+  if (!phoneRaw) {
+    logger.warn(
+      {
+        userId,
+        remoteJid,
+        hasPhoneJid: !!phoneJid,
+        keyDump: JSON.stringify(msg.key),
+        pushName: msg.pushName,
+      },
+      "Mensagem sem phone resolvível — ignorando"
+    );
+    return;
+  }
+
+  const phoneE164 = phoneRaw.startsWith("+") ? phoneRaw : `+${phoneRaw}`;
 
   // Extrai texto
   const text = extractText(msg);

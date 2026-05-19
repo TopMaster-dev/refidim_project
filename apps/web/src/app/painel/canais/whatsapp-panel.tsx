@@ -5,7 +5,11 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { connectWhatsAppAction, disconnectWhatsAppAction } from "./actions";
+import {
+  connectWhatsAppAction,
+  disconnectWhatsAppAction,
+  switchWhatsAppNumberAction,
+} from "./actions";
 
 type Status = "DISCONNECTED" | "CONNECTING" | "QR_PENDING" | "CONNECTED" | "BANNED";
 
@@ -14,6 +18,7 @@ interface SessionData {
   qrCode: string | null;
   phoneNumber: string | null;
   lastConnectedAt: Date | string | null;
+  hasStoredAuth: boolean;
 }
 
 const STATUS_BADGE: Record<Status, { label: string; variant: "neutral" | "brand" | "warning" | "success" | "danger" }> = {
@@ -26,7 +31,13 @@ const STATUS_BADGE: Record<Status, { label: string; variant: "neutral" | "brand"
 
 export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
   const [session, setSession] = useState<SessionData>(
-    initial ?? { status: "DISCONNECTED", qrCode: null, phoneNumber: null, lastConnectedAt: null }
+    initial ?? {
+      status: "DISCONNECTED",
+      qrCode: null,
+      phoneNumber: null,
+      lastConnectedAt: null,
+      hasStoredAuth: false,
+    }
   );
   const [isPending, startTransition] = useTransition();
 
@@ -70,16 +81,45 @@ export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
         {session.status === "DISCONNECTED" && (
           <Disconnected
             pending={isPending}
+            hasStoredAuth={session.hasStoredAuth}
+            phoneNumber={session.phoneNumber}
             onConnect={() =>
               startTransition(async () => {
                 await connectWhatsAppAction();
                 setSession({ ...session, status: "CONNECTING" });
               })
             }
+            onSwitchNumber={() =>
+              startTransition(async () => {
+                if (
+                  !confirm(
+                    "Limpar a sessão atual e escanear QR com OUTRO número? A sessão anterior será descartada."
+                  )
+                )
+                  return;
+                await switchWhatsAppNumberAction();
+                setSession({
+                  ...session,
+                  status: "CONNECTING",
+                  qrCode: null,
+                  phoneNumber: null,
+                  hasStoredAuth: false,
+                });
+              })
+            }
           />
         )}
 
-        {session.status === "CONNECTING" && <Connecting />}
+        {session.status === "CONNECTING" && (
+          <Connecting
+            onCancel={() =>
+              startTransition(async () => {
+                await disconnectWhatsAppAction(false);
+                setSession({ ...session, status: "DISCONNECTED", qrCode: null });
+              })
+            }
+          />
+        )}
 
         {session.status === "QR_PENDING" && session.qrCode && (
           <QRPending
@@ -108,7 +148,7 @@ export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
               startTransition(async () => {
                 if (!confirm("Desconectar e remover credenciais? Precisará escanear o QR novamente.")) return;
                 await disconnectWhatsAppAction(true);
-                setSession({ status: "DISCONNECTED", qrCode: null, phoneNumber: null, lastConnectedAt: null });
+                setSession({ status: "DISCONNECTED", qrCode: null, phoneNumber: null, lastConnectedAt: null, hasStoredAuth: false });
               })
             }
           />
@@ -120,23 +160,86 @@ export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
   );
 }
 
-function Disconnected({ pending, onConnect }: { pending: boolean; onConnect: () => void }) {
+function Disconnected({
+  pending,
+  hasStoredAuth,
+  phoneNumber,
+  onConnect,
+  onSwitchNumber,
+}: {
+  pending: boolean;
+  hasStoredAuth: boolean;
+  phoneNumber: string | null;
+  onConnect: () => void;
+  onSwitchNumber: () => void;
+}) {
   return (
     <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-2">
       <div>
-        <h3 className="text-lg font-semibold text-slate-900">Conecte seu WhatsApp</h3>
-        <p className="mt-2 text-sm text-slate-600">
-          Vamos gerar um QR Code para você escanear com o WhatsApp do número que vai usar para prospectar.
+        <h3 className="text-lg font-semibold text-slate-900">
+          {hasStoredAuth ? "Sessão anterior detectada" : "Conecte seu WhatsApp"}
+        </h3>
+
+        {hasStoredAuth ? (
+          <>
+            <p className="mt-2 text-sm text-slate-600">
+              Existe uma sessão salva
+              {phoneNumber ? (
+                <> do número <strong>+{phoneNumber}</strong></>
+              ) : null}
+              . Você pode reconectar a mesma sessão (sem escanear QR de novo) ou trocar para um número diferente.
+            </p>
+
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={onConnect}
+                disabled={pending}
+              >
+                {pending ? "Iniciando…" : "↻ Reconectar mesmo número"}
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={onSwitchNumber}
+                disabled={pending}
+              >
+                ⇄ Trocar número (novo QR)
+              </Button>
+            </div>
+
+            <p className="mt-3 text-xs text-slate-500">
+              "Trocar número" descarta a sessão atual e exige escanear um QR novo.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-slate-600">
+              Vamos gerar um QR Code para escanear com o WhatsApp do número que vai usar para prospectar.
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-slate-700">
+              <Item>Use um número aquecido (uso normal há semanas)</Item>
+              <Item>Janela de envio: 7h às 22h</Item>
+              <Item>Intervalo humano entre mensagens: 25 a 90s</Item>
+              <Item>Opt-out automático para palavras como "sair", "parar"</Item>
+            </ul>
+            <Button
+              variant="primary"
+              size="lg"
+              className="mt-6"
+              onClick={onConnect}
+              disabled={pending}
+            >
+              {pending ? "Iniciando…" : "Conectar WhatsApp"}
+            </Button>
+          </>
+        )}
+
+        <p className="mt-3 text-xs text-slate-500">
+          Pré-requisito: worker rodando. Use{" "}
+          <code className="rounded bg-slate-100 px-1.5 py-0.5">pnpm dev</code> na raiz para subir web + worker juntos.
         </p>
-        <ul className="mt-4 space-y-2 text-sm text-slate-700">
-          <Item>Use um número aquecido (uso normal há semanas)</Item>
-          <Item>Janela de envio: 7h às 22h</Item>
-          <Item>Intervalo humano entre mensagens: 25 a 90s</Item>
-          <Item>Opt-out automático para palavras como "sair", "parar"</Item>
-        </ul>
-        <Button variant="primary" size="lg" className="mt-6" onClick={onConnect} disabled={pending}>
-          {pending ? "Iniciando…" : "Conectar WhatsApp"}
-        </Button>
       </div>
       <div className="hidden md:flex items-center justify-center">
         <div className="flex h-48 w-48 items-center justify-center rounded-2xl bg-slate-50 border border-dashed border-slate-200">
@@ -147,12 +250,45 @@ function Disconnected({ pending, onConnect }: { pending: boolean; onConnect: () 
   );
 }
 
-function Connecting() {
+function Connecting({ onCancel }: { onCancel: () => void }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const isStuck = elapsed > 25;
+
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-10">
       <Spinner />
-      <p className="text-sm font-medium text-slate-700">Inicializando sessão com o WhatsApp…</p>
-      <p className="text-xs text-slate-500">Isso pode levar até 30 segundos.</p>
+      <p className="text-sm font-medium text-slate-700">
+        {isStuck
+          ? "Está demorando mais que o normal…"
+          : "Inicializando sessão com o WhatsApp…"}
+      </p>
+      <p className="text-xs text-slate-500">
+        {isStuck ? `${elapsed}s decorridos` : "Isso pode levar até 30 segundos."}
+      </p>
+
+      {isStuck && (
+        <div className="mt-4 max-w-md rounded-xl border border-warning-200 bg-warning-50 p-4 text-left text-sm text-warning-900">
+          <p className="font-semibold">⚠️ O worker pode estar offline.</p>
+          <p className="mt-1 text-warning-800">
+            Em outro terminal, na raiz do projeto:
+          </p>
+          <code className="mt-1 block rounded bg-warning-100 px-2 py-1 text-xs">
+            pnpm dev
+          </code>
+          <p className="mt-2 text-warning-800">
+            (sobe web + worker juntos). Depois clique em "Cancelar e tentar novamente".
+          </p>
+        </div>
+      )}
+
+      <Button variant="outline" size="sm" className="mt-4" onClick={onCancel}>
+        Cancelar e tentar novamente
+      </Button>
     </div>
   );
 }

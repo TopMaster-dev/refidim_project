@@ -84,8 +84,8 @@ export type ContactListInput = z.infer<typeof contactListSchema>;
 // Trabalho/Campanha
 export const jobSchema = z.object({
   name: z.string().min(2),
-  consultantId: z.string().cuid(),
-  contactListId: z.string().cuid(),
+  consultantId: z.string().min(1),
+  contactListId: z.string().min(1),
   channel: z.enum(["WHATSAPP", "EMAIL"]),
   goal: z.enum(["CAPTURE_INTEREST", "QUALIFY", "SCHEDULE_MEETING", "SEND_PROPOSAL"]),
   dailyLimit: z.number().int().min(1).max(1000).default(100),
@@ -104,7 +104,7 @@ export const emailAccountSchema = z.object({
   imapPort: z.coerce.number().int().min(1).max(65535).optional(),
   imapUser: z.string().optional(),
   imapPass: z.string().optional(),
-  consultantId: z.string().cuid().optional(),
+  consultantId: z.string().min(1).optional(),
 });
 export type EmailAccountInput = z.infer<typeof emailAccountSchema>;
 
@@ -113,6 +113,6 @@ export const leadClassificationSchema = z.object({
   status: z.enum(["COLD", "WARM", "HOT"]),
   reason: z.string(),
   triggerHumanAlert: z.boolean(),
-  alertReason: z.string().optional(),
+  alertReason: z.string().nullable(),
 });
 export type LeadClassification = z.infer<typeof leadClassificationSchema>;

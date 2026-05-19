@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma, WhatsAppStatus } from "@refidim/database";
+import { prisma, WhatsAppStatus, Prisma } from "@refidim/database";
 import { getCurrentUser } from "@/lib/auth";
 
 async function requireUser() {
@@ -38,9 +38,34 @@ export async function disconnectWhatsAppAction(logout: boolean = false) {
     data: {
       status: WhatsAppStatus.DISCONNECTED,
       qrCode: null,
-      ...(logout ? { authState: undefined, phoneNumber: null } : {}),
+      // IMPORTANTE: Prisma trata `undefined` como "não atualize". Para limpar
+      // o JSON nullable precisamos usar Prisma.DbNull explicitamente.
+      ...(logout ? { authState: Prisma.DbNull, phoneNumber: null } : {}),
     },
   });
 
   revalidatePath("/painel/canais/whatsapp");
+}
+
+/**
+ * Limpa o authState antigo e inicia uma nova sessão.
+ * Use isso quando o usuário quer escanear com OUTRO número
+ * (caso contrário, Baileys reconectaria ao número anterior).
+ */
+export async function switchWhatsAppNumberAction() {
+  const user = await requireUser();
+
+  await prisma.whatsAppSession.update({
+    where: { userId: user.id },
+    data: {
+      status: WhatsAppStatus.CONNECTING,
+      qrCode: null,
+      // Limpa o JSON nullable explicitamente — `undefined` faria Prisma pular o campo.
+      authState: Prisma.DbNull,
+      phoneNumber: null,
+      lastConnectedAt: null,
+    },
+  });
+
+  revalidatePath("/painel/canais");
 }

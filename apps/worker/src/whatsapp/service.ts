@@ -6,7 +6,7 @@ import makeWASocket, {
 import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
 import pino from "pino";
-import { prisma, WhatsAppStatus } from "@refidim/database";
+import { prisma, WhatsAppStatus, Prisma } from "@refidim/database";
 import { logger } from "../logger.js";
 import { usePostgresAuthState } from "./auth-state.js";
 import { handleIncomingMessage } from "./inbound.js";
@@ -82,30 +82,38 @@ export async function startSession(userId: string): Promise<void> {
 
       if (connection === "close") {
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+
+        // connectionReplaced (440): outro device autenticou na mesma conta.
+        // Reconectar agressivamente causa loop infinito de kicks.
+        const isReplaced = statusCode === DisconnectReason.connectionReplaced;
+
         const shouldReconnect =
           statusCode !== DisconnectReason.loggedOut &&
-          statusCode !== DisconnectReason.badSession;
+          statusCode !== DisconnectReason.badSession &&
+          !isReplaced;
 
         sessions.delete(userId);
 
         await prisma.whatsAppSession.update({
           where: { userId },
           data: {
-            status: shouldReconnect
-              ? WhatsAppStatus.DISCONNECTED
-              : statusCode === DisconnectReason.loggedOut
-                ? WhatsAppStatus.DISCONNECTED
-                : WhatsAppStatus.BANNED,
+            status:
+              statusCode === DisconnectReason.loggedOut ||
+              statusCode === DisconnectReason.badSession
+                ? WhatsAppStatus.BANNED
+                : WhatsAppStatus.DISCONNECTED,
             qrCode: null,
           },
         });
 
         logger.warn(
-          { userId, statusCode, shouldReconnect },
-          "WhatsApp desconectado"
+          { userId, statusCode, shouldReconnect, isReplaced },
+          isReplaced
+            ? "🚫 WhatsApp expulso por outro dispositivo (440) — aguardando ação manual"
+            : "WhatsApp desconectado"
         );
 
-        // Reconexão automática apenas se não foi logout intencional
+        // Reconexão automática apenas se não foi logout intencional nem connectionReplaced
         if (shouldReconnect) {
           setTimeout(() => {
             startSession(userId).catch((err) =>
@@ -161,7 +169,8 @@ export async function stopSession(userId: string, logout = false): Promise<void>
     data: {
       status: WhatsAppStatus.DISCONNECTED,
       qrCode: null,
-      ...(logout ? { authState: undefined, phoneNumber: null } : {}),
+      // Prisma trata undefined como "skip" — usar DbNull pra realmente apagar
+      ...(logout ? { authState: Prisma.DbNull, phoneNumber: null } : {}),
     },
   });
 

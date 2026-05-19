@@ -135,6 +135,7 @@ function AccountForm({
   const [isPending, startTransition] = useTransition();
   const [showImap, setShowImap] = useState(false);
   const [preset, setPreset] = useState<"gmail" | "outlook" | "custom">("gmail");
+  const [fromEmail, setFromEmail] = useState("");
 
   // Defaults por provedor
   const presets = {
@@ -197,7 +198,18 @@ function AccountForm({
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Field name="fromEmail" label="E-mail remetente" type="email" required placeholder="contato@empresa.com.br" />
+        <div className="space-y-2">
+          <Label htmlFor="fromEmail">E-mail remetente</Label>
+          <Input
+            id="fromEmail"
+            name="fromEmail"
+            type="email"
+            required
+            placeholder="contato@empresa.com.br"
+            value={fromEmail}
+            onChange={(e) => setFromEmail(e.target.value)}
+          />
+        </div>
         <Field name="fromName" label="Nome remetente" required placeholder="João da Refidim" />
       </div>
 
@@ -207,7 +219,17 @@ function AccountForm({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field name="smtpHost" label="Host SMTP" required defaultValue={p.smtpHost} />
         <Field name="smtpPort" label="Porta" type="number" required defaultValue={String(p.smtpPort)} />
-        <Field name="smtpUser" label="Usuário" required placeholder="seu@email.com" />
+        <div className="space-y-2">
+          <Label htmlFor="smtpUser">Usuário (geralmente igual ao e-mail remetente)</Label>
+          <Input
+            id="smtpUser"
+            name="smtpUser"
+            required
+            placeholder="seu@email.com"
+            value={fromEmail}
+            onChange={(e) => setFromEmail(e.target.value)}
+          />
+        </div>
         <Field name="smtpPass" label="Senha (ou app password)" type="password" required />
       </div>
 

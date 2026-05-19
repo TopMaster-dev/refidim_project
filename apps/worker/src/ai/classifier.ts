@@ -4,9 +4,11 @@ export interface LeadClassification {
   status: "COLD" | "WARM" | "HOT";
   reason: string;
   triggerHumanAlert: boolean;
-  alertReason?: string;
+  alertReason: string | null;
 }
 
+// OpenAI strict mode exige TODOS os campos em `required` e campos nullable
+// devem usar type: ["string", "null"] (não optional).
 const CLASSIFIER_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -27,11 +29,11 @@ const CLASSIFIER_SCHEMA = {
         "Verdadeiro se um humano deve ser alertado AGORA (lead pediu reunião/proposta/demonstração, demonstrou urgência, ou aceitou próximo passo). Perguntar preço sozinho NÃO basta.",
     },
     alertReason: {
-      type: "string",
-      description: "Se triggerHumanAlert=true, motivo curto do alerta. Caso contrário, omitir.",
+      type: ["string", "null"],
+      description: "Se triggerHumanAlert=true, motivo curto do alerta. Use null caso contrário.",
     },
   },
-  required: ["status", "reason", "triggerHumanAlert"],
+  required: ["status", "reason", "triggerHumanAlert", "alertReason"],
 };
 
 const CLASSIFIER_SYSTEM = `Você é um classificador de leads B2B. Sua função é analisar a conversa entre um vendedor e um possível cliente e classificar o lead em COLD/WARM/HOT.
