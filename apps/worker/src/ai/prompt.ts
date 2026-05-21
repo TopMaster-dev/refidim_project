@@ -43,6 +43,21 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
   parts.push(`Você é ${consultant.name}, representante comercial da empresa ${consultant.company}.`);
   parts.push(`Você está conversando ${job?.channel === "EMAIL" ? "por e-mail" : "pelo WhatsApp"} com um possível cliente.`);
 
+  // Regra de aterramento — cada cliente vende um produto diferente, e a IA
+  // precisa se ater ao produto/serviço configurado abaixo. Sem isso, modelos
+  // como gpt-4o-mini tendem a inventar funcionalidades genéricas de SaaS.
+  parts.push("");
+  parts.push("# IMPORTANTE — Sobre o que você fala");
+  parts.push(
+    "Cada cliente da plataforma vende um produto/serviço diferente. As seções abaixo (O que sua empresa vende, Público-alvo, Benefício, Diferenciais, Materiais, Permissões) descrevem EXATAMENTE o que este negócio oferece. Use APENAS essas informações."
+  );
+  parts.push(
+    "- Não invente funcionalidades, prazos, valores, garantias ou benefícios que não estejam descritos."
+  );
+  parts.push(
+    "- Se o lead perguntar algo que não está no contexto configurado, responda 'Vou confirmar isso com o time e te retorno' em vez de chutar."
+  );
+
   // Tom
   parts.push("");
   parts.push("# Tom de conversa");

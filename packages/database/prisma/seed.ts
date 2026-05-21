@@ -34,41 +34,41 @@ async function main() {
   });
 
   // Consultor de exemplo — conforme respostas do cliente
+  const consultantData = {
+    userId: user.id,
+    name: "Refidim Comercial",
+    company: "Refidim",
+    product:
+      "REFIDIM é uma plataforma inteligente de prospecção e conversão automatizada que encontra empresas, inicia conversas de forma natural, qualifica oportunidades automaticamente e entrega leads quentes prontos para fechamento pelo time comercial.",
+    audience:
+      "Pequenas e médias empresas que precisam gerar oportunidades comerciais de forma previsível, sem depender de prospecção manual, equipe sobrecarregada ou tráfego pago.",
+    tone: ConversationTone.CONSULTIVE,
+    goal: ConsultantGoal.SCHEDULE_MEETING,
+  };
   const consultant = await prisma.consultant.upsert({
     where: { id: "seed-consultant-refidim" },
-    update: {},
-    create: {
-      id: "seed-consultant-refidim",
-      userId: user.id,
-      name: "Refidim Comercial",
-      company: "Refidim",
-      product:
-        "Sistema que trabalha contatos automaticamente, conversa de forma natural e entrega oportunidades prontas para o humano assumir.",
-      audience:
-        "Pequenas e médias empresas que vendem pelo WhatsApp e perdem oportunidades por falta de tempo ou organização.",
-      tone: ConversationTone.CONSULTIVE,
-      goal: ConsultantGoal.SCHEDULE_MEETING,
-    },
+    update: consultantData,
+    create: { id: "seed-consultant-refidim", ...consultantData },
   });
 
   const businessContextData = {
       consultantId: consultant.id,
       whatYouSell:
-        "Plataforma de prospecção via WhatsApp e e-mail com IA que conversa de forma humana e identifica leads quentes.",
+        "REFIDIM é uma plataforma inteligente de prospecção e conversão automatizada que encontra empresas, inicia conversas de forma natural, qualifica oportunidades automaticamente e entrega leads quentes prontos para fechamento pelo time comercial.",
       whoYouSellTo:
-        "PMEs que vendem pelo WhatsApp e perdem leads por falta de tempo ou organização.",
+        "Pequenas e médias empresas que precisam gerar oportunidades comerciais de forma previsível, sem depender de prospecção manual, equipe sobrecarregada ou tráfego pago.",
       mainBenefit:
-        "Parar de perder lead quente e focar apenas em quem realmente demonstrou interesse.",
+        "O REFIDIM elimina a etapa mais lenta, cara e desgastante do processo comercial: encontra, inicia conversa, qualifica o lead e aciona o time comercial em oportunidades reais de fechamento — tudo no automático.",
       differentials:
         "Conversa humanizada; não parece chatbot; classifica leads automaticamente; funciona com listas próprias, Google e tráfego pago; direciona o humano no momento certo.",
       commonObjections: [
-        { objection: "Agora não tenho interesse.", idealAnswer: "Tranquilo. Hoje vocês já usam alguma estratégia para trabalhar os contatos que chegam pelo WhatsApp?" },
-        { objection: "Manda mais informações.", idealAnswer: "Claro. Só pra eu te mandar algo mais alinhado: hoje o maior desafio aí é atendimento ou conversão?" },
-        { objection: "Quanto custa?", idealAnswer: "Te passo sim. Só pra eu te explicar certinho: isso seria para uso interno da empresa ou para equipe comercial?" },
+        { objection: "Agora não tenho interesse.", idealAnswer: "Tranquilo! Vocês já possuem algum sistema para fazer a captação, abordagem inicial e qualificação de contatos? Nosso sistema faz tudo isso, sem custo de captação, e entrega apenas oportunidades com potencial real para o comercial fazer o fechamento." },
+        { objection: "Manda mais informações.", idealAnswer: "Claro. Só pra eu te mandar algo mais personalizado ao seu negócio: hoje o maior desafio aí é manter ou atrair novos clientes?" },
+        { objection: "O responsável não se encontra no momento.", idealAnswer: "Sem problema! Qual o melhor horário para falar com ele(a)? É algo rápido e acredito que possa ser relevante para reduzir custo e aumentar o faturamento da empresa, foi um amigo em comum que fez a indicação." },
         { objection: "Não tenho tempo agora.", idealAnswer: "Sem problema. Qual horário costuma ser mais tranquilo pra você normalmente?" },
-        { objection: "Já usamos algo parecido.", idealAnswer: "Entendi. E hoje o que sente que ainda poderia melhorar nessa parte?" },
-        { objection: "Como conseguiu meu contato?", idealAnswer: "Encontrei através de contatos públicos da sua empresa. Vi que vocês atendem pelo WhatsApp e achei que poderia fazer sentido te mostrar." },
-        { objection: "Isso funciona mesmo?", idealAnswer: "O objetivo é justamente evitar que contatos interessados esfriem por falta de resposta ou acompanhamento." },
+        { objection: "Já usamos algo parecido.", idealAnswer: "Excelente, isso mostra que vocês já enxergam valor nesse tipo de processo. Me conta uma coisa: o que sentiram que funcionou bem e o que deixou a desejar?" },
+        { objection: "Como conseguiu meu contato?", idealAnswer: "Nosso sistema faz análise na internet, em tempo real, de empresas com potencial de crescimento como a sua e faz a captação." },
+        { objection: "Isso funciona mesmo?", idealAnswer: "Sim. O conceito é simples: enquanto muitas empresas ainda dependem de prospecção manual, nossa tecnologia automatiza captação, abordagem inicial e qualificação — entregando apenas oportunidades com potencial real de fechamento para o comercial, sem nenhum custo de tráfego pago." },
         { objection: "Preciso pensar.", idealAnswer: "Claro. O que mais te deixou em dúvida até agora?" },
       ],
       conversationGoal: "Identificar interesse real e conduzir o lead até aceitar uma demonstração ou reunião.",
