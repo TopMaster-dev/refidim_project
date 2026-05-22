@@ -20,6 +20,11 @@ packages/*/.env
 apps/*/.env
 apps/*/.env.local
 
+# Deploy secrets — NUNCA commitar
+**/.secrets
+**/.secrets.local
+tools/deploy/.secrets*
+
 # Logs
 *.log
 npm-debug.log*
