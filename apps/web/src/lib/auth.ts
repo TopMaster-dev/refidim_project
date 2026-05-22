@@ -60,7 +60,12 @@ export async function createSession(userId: string, email: string) {
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    // `secure: true` faz o browser só enviar o cookie via HTTPS — se estiver
+    // setado mas a app rodar em HTTP (ex: IP-only sem certificado), o cookie
+    // nunca volta e o usuário fica preso na tela de login. Por isso, derivamos
+    // do protocolo de NEXTAUTH_URL: HTTPS → true, HTTP → false. Quando o
+    // domínio + SSL forem ativados, basta trocar NEXTAUTH_URL pra https://.
+    secure: process.env.NEXTAUTH_URL?.startsWith("https://") ?? false,
     sameSite: "lax",
     maxAge: SESSION_DAYS * 24 * 60 * 60,
     path: "/",
