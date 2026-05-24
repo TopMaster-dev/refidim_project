@@ -4,7 +4,10 @@ import { cookies } from "next/headers";
 import { prisma } from "@refidim/database";
 
 const SESSION_COOKIE = "refidim_session";
-const SESSION_DAYS = 30;
+// Sliding window: cada request autenticado renova o cookie por mais N minutos.
+// Inativo por mais que isso → cookie expira → próximo acesso cai em /login.
+// O middleware faz o refresh; aqui só definimos o TTL inicial pós-login.
+export const IDLE_TIMEOUT_MIN = 30;
 
 function getSecret(): Uint8Array {
   const secret = process.env.NEXTAUTH_SECRET;
@@ -37,7 +40,7 @@ export async function signSessionToken(payload: SessionPayload): Promise<string>
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_DAYS}d`)
+    .setExpirationTime(`${IDLE_TIMEOUT_MIN}m`)
     .sign(getSecret());
 }
 
@@ -67,7 +70,7 @@ export async function createSession(userId: string, email: string) {
     // domínio + SSL forem ativados, basta trocar NEXTAUTH_URL pra https://.
     secure: process.env.NEXTAUTH_URL?.startsWith("https://") ?? false,
     sameSite: "lax",
-    maxAge: SESSION_DAYS * 24 * 60 * 60,
+    maxAge: IDLE_TIMEOUT_MIN * 60,
     path: "/",
   });
 }
