@@ -4,25 +4,35 @@ import { logger } from "../logger.js";
 import { sendText, isSessionActive } from "./service.js";
 
 /**
- * Verifica se o horário atual está dentro da janela 7h-22h (timezone do servidor).
+ * A janela 7h-22h é horário de Brasília. Extraímos a hora em São Paulo
+ * explicitamente — não confiamos no relógio local do servidor (pode rodar
+ * em qualquer timezone).
  */
+function getBrazilTime(date: Date): { hour: number; minute: number; second: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => Number.parseInt(parts.find((p) => p.type === type)!.value, 10);
+  return { hour: get("hour"), minute: get("minute"), second: get("second") };
+}
+
 export function isWithinSendWindow(date = new Date()): boolean {
-  const hour = date.getHours();
+  const { hour } = getBrazilTime(date);
   return hour >= SEND_WINDOW.startHour && hour < SEND_WINDOW.endHour;
 }
 
-/**
- * Retorna milissegundos até a próxima janela permitida.
- * Se já está na janela, retorna 0.
- */
 export function msUntilNextWindow(date = new Date()): number {
   if (isWithinSendWindow(date)) return 0;
-  const next = new Date(date);
-  if (date.getHours() >= SEND_WINDOW.endHour) {
-    next.setDate(next.getDate() + 1);
-  }
-  next.setHours(SEND_WINDOW.startHour, 0, 0, 0);
-  return next.getTime() - date.getTime();
+  const { hour, minute, second } = getBrazilTime(date);
+  const hoursAhead =
+    hour >= SEND_WINDOW.endHour
+      ? 24 - hour + SEND_WINDOW.startHour
+      : SEND_WINDOW.startHour - hour;
+  return hoursAhead * 3_600_000 - minute * 60_000 - second * 1_000;
 }
 
 function randomDelayMs(): number {

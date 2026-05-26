@@ -7,7 +7,7 @@ import { startEmailManager, stopEmailManager } from "./email/manager.js";
 import { startOpeningDispatcher, stopOpeningDispatcher } from "./ai/opener.js";
 import { hasAIProvider } from "./ai/provider.js";
 import { startHumanDispatcher, stopHumanDispatcher } from "./human-dispatcher.js";
-import { startExtractor, stopExtractor } from "./extractor/google-maps.js";
+import { startExtractor, stopExtractor } from "./extractor/google-places.js";
 
 async function bootstrap() {
   logger.info("🚀 Refidim worker iniciando...");
