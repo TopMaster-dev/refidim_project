@@ -8,6 +8,7 @@ import { startOpeningDispatcher, stopOpeningDispatcher } from "./ai/opener.js";
 import { hasAIProvider } from "./ai/provider.js";
 import { startHumanDispatcher, stopHumanDispatcher } from "./human-dispatcher.js";
 import { startExtractor, stopExtractor } from "./extractor/google-places.js";
+import { startReplyRecovery, stopReplyRecovery } from "./ai/reply-recovery.js";
 
 async function bootstrap() {
   logger.info("🚀 Refidim worker iniciando...");
@@ -24,6 +25,8 @@ async function bootstrap() {
   // Opening dispatcher: para trabalhos RUNNING, gera primeiras abordagens
   if (hasAIProvider()) {
     startOpeningDispatcher();
+    // Safety-net: garante resposta a leads que ficaram sem reply em 40-80s
+    startReplyRecovery();
   } else {
     logger.warn("⚠️  AI_PROVIDER sem chave configurada — IA desativada (configure ANTHROPIC_API_KEY ou OPENAI_API_KEY)");
   }
@@ -49,6 +52,7 @@ const shutdown = async (signal: string) => {
   await shutdownAllSessions();
   await stopEmailManager();
   stopOpeningDispatcher();
+  stopReplyRecovery();
   stopHumanDispatcher();
   stopExtractor();
   await shutdownRedis();

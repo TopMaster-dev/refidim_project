@@ -59,6 +59,7 @@ export function LeadDetailClient({ lead }: { lead: LeadView }) {
 
   const isHandedOff = lead.status === "HANDED_OFF";
   const isOptedOut = lead.status === "OPTED_OUT";
+  const isPausedWaiting = !isHandedOff && !isOptedOut && (lead.conversation?.isPaused ?? false);
 
   const displayName = lead.contact.name ?? lead.contact.phone ?? lead.contact.email ?? "—";
   const initials = displayName.slice(0, 2).toUpperCase();
@@ -136,7 +137,12 @@ export function LeadDetailClient({ lead }: { lead: LeadView }) {
                 <span className="font-semibold">Você assumiu:</span> a IA está pausada. Responda manualmente abaixo.
               </p>
             )}
-            {!isHandedOff && !isOptedOut && (
+            {isPausedWaiting && (
+              <p className="text-danger-800">
+                <span className="font-semibold">🔥 Lead quente — IA pausada.</span> O lead está pronto. Clique em <strong>Assumir conversa</strong> e feche você mesmo.
+              </p>
+            )}
+            {!isHandedOff && !isOptedOut && !isPausedWaiting && (
               <p className="text-slate-700">
                 <span className="font-semibold">IA ativa:</span> assuma quando quiser responder você mesmo.
               </p>

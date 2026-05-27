@@ -109,9 +109,20 @@ const config: Config = {
         "slide-up": "slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
         "slide-down": "slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
         "scale-in": "scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+        "slide-in-left": "slideInLeft 0.28s cubic-bezier(0.16, 1, 0.3, 1)",
         "shimmer": "shimmer 2s linear infinite",
+        "pop-in": "popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
       },
       keyframes: {
+        slideInLeft: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(0)" },
+        },
+        popIn: {
+          "0%": { opacity: "0", transform: "scale(0.8)" },
+          "60%": { transform: "scale(1.04)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
         fadeIn: {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },

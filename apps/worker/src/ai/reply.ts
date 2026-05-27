@@ -168,7 +168,6 @@ async function classifyAndAlert(args: {
   try {
     const result = await classifyLead(args.history);
 
-    // Mapeia para LeadStatus do Prisma
     const newStatus: LeadStatus =
       result.status === "HOT"
         ? LeadStatus.HOT
@@ -181,7 +180,26 @@ async function classifyAndAlert(args: {
       data: { status: newStatus, notes: result.reason },
     });
 
-    if (result.triggerHumanAlert) {
+    // Regra do cliente: quando lead vira HOT, a IA PARA de responder e aguarda
+    // o humano clicar "Assumir conversa". Sem isso a IA continuava conversando
+    // depois do lead já estar pronto pra fechar — interferindo na venda.
+    if (result.status === "HOT") {
+      await prisma.conversation.update({
+        where: { id: args.conversationId },
+        data: { isPaused: true },
+      });
+
+      // Garante alerta mesmo se a IA não tiver flagado triggerHumanAlert
+      await prisma.alert.create({
+        data: {
+          userId: args.userId,
+          leadId: args.leadId,
+          kind: AlertKind.LEAD_HOT,
+          message: result.alertReason ?? result.reason ?? "Lead pronto para o time comercial assumir",
+        },
+      });
+      logger.info({ leadId: args.leadId }, "🚨 Lead HOT — conversa pausada, aguardando humano");
+    } else if (result.triggerHumanAlert) {
       await prisma.alert.create({
         data: {
           userId: args.userId,

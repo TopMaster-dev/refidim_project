@@ -73,7 +73,8 @@ export default async function LeadsPage({ searchParams }: PageProps) {
         description="Acompanhe contatos em conversa e assuma quando estiver pronto."
       />
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-0">
+      {/* Filtros — pills de altura uniforme, scroll horizontal no mobile */}
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         <FilterTab active={!sp.status} href="/painel/leads" count={total}>
           Todos
         </FilterTab>
@@ -101,45 +102,81 @@ export default async function LeadsPage({ searchParams }: PageProps) {
           }
         />
       ) : (
-        <Card className="overflow-hidden p-0">
-          <table className="w-full">
-            <thead className="border-b border-slate-100 bg-slate-25 text-left">
-              <tr>
-                <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Contato</th>
-                <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Empresa</th>
-                <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Trabalho</th>
-                <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Canal</th>
-                <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Última interação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {leads.map((l) => (
-                <tr key={l.id} className="transition-colors hover:bg-slate-50">
-                  <td className="px-5 py-3.5">
-                    <Link href={`/painel/leads/${l.id}`} className="flex items-center gap-3 font-medium text-slate-900 hover:text-brand-700">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-                        {(l.contact.name ?? l.contact.phone ?? l.contact.email ?? "?").slice(0, 2).toUpperCase()}
-                      </span>
-                      <span className="min-w-0 truncate">
-                        {l.contact.name ?? l.contact.phone ?? l.contact.email ?? "—"}
-                      </span>
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3.5 text-sm text-slate-700">{l.contact.company ?? "—"}</td>
-                  <td className="px-5 py-3.5 text-sm text-slate-600">{l.job.name}</td>
-                  <td className="px-5 py-3.5 text-sm text-slate-600">{l.job.channel === "WHATSAPP" ? "WhatsApp" : "E-mail"}</td>
-                  <td className="px-5 py-3.5">
-                    <Badge variant={STATUS_VARIANTS[l.status]} dot>{STATUS_LABELS[l.status]}</Badge>
-                  </td>
-                  <td className="px-5 py-3.5 text-2xs text-slate-500">
-                    {l.lastMessageAt ? formatDate(l.lastMessageAt) : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+        <>
+          {/* Desktop: tabela */}
+          <Card className="hidden overflow-hidden p-0 lg:block">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="border-b border-slate-100 bg-slate-25 text-left">
+                  <tr>
+                    <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Contato</th>
+                    <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Empresa</th>
+                    <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Trabalho</th>
+                    <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Canal</th>
+                    <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                    <th className="px-5 py-3 text-2xs font-semibold uppercase tracking-wider text-slate-500">Última interação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {leads.map((l) => (
+                    <tr key={l.id} className="transition-colors hover:bg-slate-50">
+                      <td className="px-5 py-3.5">
+                        <Link href={`/painel/leads/${l.id}`} className="flex items-center gap-3 font-medium text-slate-900 hover:text-brand-700">
+                          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand-gradient text-xs font-semibold text-white">
+                            {(l.contact.name ?? l.contact.phone ?? l.contact.email ?? "?").slice(0, 2).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 truncate">
+                            {l.contact.name ?? l.contact.phone ?? l.contact.email ?? "—"}
+                          </span>
+                        </Link>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-slate-700">{l.contact.company ?? "—"}</td>
+                      <td className="px-5 py-3.5 text-sm text-slate-600">{l.job.name}</td>
+                      <td className="px-5 py-3.5 text-sm text-slate-600">{l.job.channel === "WHATSAPP" ? "WhatsApp" : "E-mail"}</td>
+                      <td className="px-5 py-3.5">
+                        <Badge variant={STATUS_VARIANTS[l.status]} dot>{STATUS_LABELS[l.status]}</Badge>
+                      </td>
+                      <td className="px-5 py-3.5 text-2xs text-slate-500">
+                        {l.lastMessageAt ? formatDate(l.lastMessageAt) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          {/* Mobile: cards */}
+          <div className="space-y-3 lg:hidden">
+            {leads.map((l) => (
+              <Link
+                key={l.id}
+                href={`/painel/leads/${l.id}`}
+                className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-brand-gradient text-sm font-semibold text-white">
+                    {(l.contact.name ?? l.contact.phone ?? l.contact.email ?? "?").slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-slate-900">
+                      {l.contact.name ?? l.contact.phone ?? l.contact.email ?? "—"}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">
+                      {l.contact.company ? `${l.contact.company} · ` : ""}
+                      {l.job.channel === "WHATSAPP" ? "WhatsApp" : "E-mail"}
+                    </p>
+                  </div>
+                  <Badge variant={STATUS_VARIANTS[l.status]} dot>{STATUS_LABELS[l.status]}</Badge>
+                </div>
+                <div className="mt-2.5 flex items-center justify-between text-2xs text-slate-400">
+                  <span className="truncate">{l.job.name}</span>
+                  <span className="flex-shrink-0">{l.lastMessageAt ? formatDate(l.lastMessageAt) : "—"}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -160,19 +197,18 @@ function FilterTab({
     <Link
       href={href}
       className={cn(
-        "group relative -mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+        // h-9 garante altura uniforme em todas as pills, independente do conteúdo
+        "group inline-flex h-9 flex-shrink-0 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition-all",
         active
-          ? "border-slate-900 text-slate-900"
-          : "border-transparent text-slate-500 hover:text-slate-700"
+          ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
       )}
     >
-      {children}
+      <span className="whitespace-nowrap">{children}</span>
       <span
         className={cn(
-          "rounded-full px-1.5 py-0.5 text-2xs font-semibold tabular",
-          active
-            ? "bg-slate-900 text-white"
-            : "bg-slate-100 text-slate-600 group-hover:bg-slate-200"
+          "inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-2xs font-semibold tabular",
+          active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600 group-hover:bg-slate-200"
         )}
       >
         {count}

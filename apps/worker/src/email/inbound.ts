@@ -11,6 +11,8 @@ import {
 import { decryptSecret, OPT_OUT_KEYWORDS } from "@refidim/shared";
 import { logger } from "../logger.js";
 import { generateAndSendReply } from "../ai/reply.js";
+import { detectAutoReply } from "../ai/bot-detector.js";
+import { handleSuspectedBot, resetBotStreak } from "../ai/bot-handler.js";
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -204,6 +206,7 @@ async function routeIncomingEmail(
       },
     }));
 
+  const botCheck = detectAutoReply(text);
   await prisma.message.create({
     data: {
       conversationId: conversation.id,
@@ -216,6 +219,9 @@ async function routeIncomingEmail(
         from: fromAddr,
         uid,
         date: parsed.date?.toISOString(),
+        suspectedBot: botCheck.isLikelyBot,
+        botConfidence: botCheck.confidence,
+        botReasons: botCheck.reasons,
       },
     },
   });
@@ -224,6 +230,32 @@ async function routeIncomingEmail(
     where: { id: lead.id },
     data: { lastMessageAt: new Date() },
   });
+
+  // Se essa mensagem parece de bot/autoresponder, conta consecutivas.
+  // 2+ → pausa AI e marca lead. 1ª: continua tentando com prompt humano.
+  if (botCheck.isLikelyBot) {
+    const { shouldPause } = await handleSuspectedBot({
+      conversationId: conversation.id,
+      leadId: lead.id,
+      userId: account.userId,
+      reason: botCheck.reasons.join("; "),
+    });
+    if (shouldPause) {
+      logger.info(
+        { from: fromAddr, reasons: botCheck.reasons },
+        "🤖 2+ respostas automáticas — IA pausada, alerta criado"
+      );
+      return;
+    }
+    logger.info(
+      { from: fromAddr, confidence: botCheck.confidence },
+      "🤖 1ª resposta possivelmente automática — IA vai tentar abordagem mais humana"
+    );
+    // continua → AI reply será gerado com este sinal no prompt (futuramente)
+  } else {
+    // Mensagem normal → reseta contador se havia suspeita anterior
+    await resetBotStreak(conversation.id);
+  }
 
   // Opt-out
   const normalized = text.toLowerCase();

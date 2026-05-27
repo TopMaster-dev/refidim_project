@@ -18,10 +18,12 @@ export const SEND_WINDOW = {
   endHour: 22,
 };
 
-// Delay humano entre mensagens (conforme cliente: 25s-90s)
+// Delay humano entre mensagens (5s-20s — UX rápido pro cliente sentir o sistema vivo).
+// ATENÇÃO: valores baixos AUMENTAM risco de ban do WhatsApp em chips não-aquecidos.
+// Se aparecer banimento frequente, suba pra 20-60s.
 export const SEND_DELAY_MS = {
-  min: 25_000,
-  max: 90_000,
+  min: 5_000,
+  max: 20_000,
 };
 
 // Texto padrão de opt-out a anexar nas conversas

@@ -19,6 +19,10 @@ const RESOURCE_NAV = [
   { label: "Canais", href: "/painel/canais", icon: ZapIcon },
 ];
 
+const HELP_NAV = [
+  { label: "Guia de uso", href: "/painel/guia", icon: BookIcon },
+];
+
 const SECONDARY_NAV = [
   { label: "Conta & plano", href: "/painel/conta", icon: SettingsIcon },
 ];
@@ -27,16 +31,18 @@ export function PainelSidebar({
   userName,
   userEmail,
   unreadAlerts,
+  onNavigate,
 }: {
   userName: string;
   userEmail: string;
   unreadAlerts: number;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-slate-200 bg-white">
-      <div className="flex h-16 items-center border-b border-slate-100 px-5">
+    <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white">
+      <div className="flex h-16 flex-shrink-0 items-center border-b border-slate-100 px-5">
         <Logo variant="full" size="md" />
       </div>
 
@@ -46,6 +52,7 @@ export function PainelSidebar({
             <NavItem
               key={item.href}
               {...item}
+              onNavigate={onNavigate}
               active={item.exact ? pathname === item.href : pathname.startsWith(item.href)}
               badge={
                 item.href === "/painel/leads" && unreadAlerts > 0 ? unreadAlerts : undefined
@@ -59,6 +66,18 @@ export function PainelSidebar({
             <NavItem
               key={item.href}
               {...item}
+              onNavigate={onNavigate}
+              active={pathname.startsWith(item.href)}
+            />
+          ))}
+        </NavSection>
+
+        <NavSection label="Ajuda">
+          {HELP_NAV.map((item) => (
+            <NavItem
+              key={item.href}
+              {...item}
+              onNavigate={onNavigate}
               active={pathname.startsWith(item.href)}
             />
           ))}
@@ -69,6 +88,7 @@ export function PainelSidebar({
             <NavItem
               key={item.href}
               {...item}
+              onNavigate={onNavigate}
               active={pathname.startsWith(item.href)}
             />
           ))}
@@ -116,16 +136,19 @@ function NavItem({
   icon: Icon,
   active,
   badge,
+  onNavigate,
 }: {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   active: boolean;
   badge?: number;
+  onNavigate?: () => void;
 }) {
   return (
     <Link
       href={href}
+      onClick={onNavigate}
       className={cn(
         "group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
         active
@@ -221,6 +244,14 @@ function SettingsIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+function BookIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
     </svg>
   );
 }

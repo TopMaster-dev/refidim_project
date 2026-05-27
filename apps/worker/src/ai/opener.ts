@@ -13,7 +13,7 @@ import { isSessionActive } from "../whatsapp/service.js";
 import { scheduleWhatsAppSend } from "../whatsapp/sender.js";
 import { scheduleEmailSend } from "../email/sender.js";
 
-const POLL_INTERVAL_MS = 60_000;
+const POLL_INTERVAL_MS = 15_000; // 15s — pega leads novos rápido, dá sensação de "ao vivo"
 const BATCH_PER_TICK = 5; // até 5 aberturas por tick por trabalho
 
 let pollHandle: NodeJS.Timeout | null = null;
@@ -130,7 +130,17 @@ async function processJobOpenings(
 
 async function dispatchOpening(
   job: { id: string; userId: string; channel: string; goal: string; consultant: any },
-  lead: { id: string; contactId: string; contact: { name: string | null; phone: string | null; email: string | null } }
+  lead: {
+    id: string;
+    contactId: string;
+    contact: {
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+      company?: string | null;
+      metadata?: unknown;
+    };
+  }
 ): Promise<void> {
   // Escolhe uma abertura aleatória dentre as ativas
   const openings = (job.consultant.openings ?? []) as Array<{ text: string; label: string }>;
@@ -140,9 +150,9 @@ async function dispatchOpening(
     // Sem aberturas cadastradas — pede para IA improvisar baseada no contexto
     openingText = await generateOpening(job, lead.contact.name);
   } else {
-    // Escolhe aleatória e personaliza com IA usando o nome do contato
+    // Escolhe aleatória e substitui variáveis do contato + consultor
     const chosen = openings[Math.floor(Math.random() * openings.length)]!;
-    openingText = await personalizeOpening(job, chosen.text, lead.contact.name);
+    openingText = await personalizeOpening(job, chosen.text, lead.contact);
   }
 
   // Cria conversation
@@ -185,23 +195,68 @@ async function dispatchOpening(
   logger.info({ leadId: lead.id, channel: job.channel }, "🎯 Abertura disparada");
 }
 
+/**
+ * Variáveis suportadas em textos de abertura (e em outros lugares no futuro):
+ *   {nome}            → primeiro nome do contato
+ *   {nome_completo}   → nome completo do contato
+ *   {empresa}         → empresa do contato (Contact.company)
+ *   {consultor}       → nome do consultor (AI persona)
+ *   {minha_empresa}   → empresa do consultor (Consultant.company)
+ *   {produto}         → produto/serviço configurado no consultor
+ *   {cidade}          → cidade extraída do endereço do contato
+ *   {segmento}        → público-alvo configurado no consultor
+ *
+ * Tokens não preenchidos somem (string vazia) em vez de ficar literalmente "{x}".
+ */
+function buildTemplateVars(
+  job: { consultant: { name?: string; company?: string; product?: string; audience?: string } },
+  contact: { name: string | null; company?: string | null; metadata?: unknown }
+): Record<string, string> {
+  const firstName = contact.name?.split(" ")[0] ?? "";
+  const meta = (contact.metadata ?? {}) as Record<string, unknown>;
+  const city =
+    typeof meta.city === "string"
+      ? meta.city
+      : typeof meta.address === "string"
+        ? extractCity(meta.address)
+        : "";
+  return {
+    nome: firstName,
+    nome_completo: contact.name ?? "",
+    empresa: contact.company ?? "",
+    consultor: job.consultant.name ?? "",
+    minha_empresa: job.consultant.company ?? "",
+    produto: job.consultant.product ?? "",
+    segmento: job.consultant.audience ?? "",
+    cidade: city,
+  };
+}
+
+function renderTemplate(text: string, vars: Record<string, string>): string {
+  return text.replace(/\{(\w+)\}/g, (_, key) => vars[key.toLowerCase()] ?? "");
+}
+
+/**
+ * Tenta extrair a cidade de um endereço como "R. das Flores, 123 - Pinheiros, São Paulo - SP".
+ * Pega o penúltimo segmento separado por vírgula como aproximação.
+ */
+function extractCity(address: string): string {
+  const parts = address.split(",").map((s) => s.trim()).filter(Boolean);
+  if (parts.length < 2) return "";
+  // Penúltimo costuma ser bairro ou cidade
+  const candidate = parts[parts.length - 2];
+  if (!candidate) return "";
+  // Remove sufixos "- SP" / "- RJ" etc
+  return candidate.replace(/\s*-\s*[A-Z]{2}$/, "").trim();
+}
+
 async function personalizeOpening(
   job: any,
   baseText: string,
-  contactName: string | null
+  contact: { name: string | null; company?: string | null; metadata?: unknown }
 ): Promise<string> {
-  // Substitui placeholders simples primeiro
-  let text = baseText;
-  const firstName = contactName?.split(" ")[0];
-  if (firstName) {
-    text = text.replace(/\{nome\}/gi, firstName);
-  }
-
-  // Se não tem placeholders, retorna direto (mais barato em tokens)
-  if (!baseText.includes("{") && contactName) {
-    return text;
-  }
-  return text;
+  const vars = buildTemplateVars(job, contact);
+  return renderTemplate(baseText, vars);
 }
 
 async function generateOpening(job: any, contactName: string | null): Promise<string> {

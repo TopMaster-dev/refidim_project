@@ -8,6 +8,8 @@ import { Stat } from "@/components/ui/stat";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
+import { OnboardingWizard } from "./onboarding-wizard";
+import { ActivityFeed } from "./activity-feed";
 
 const STATUS_LABELS: Record<string, string> = {
   ACTIVE: "Ativa",
@@ -30,6 +32,9 @@ export default async function DashboardPage() {
   const plan = user.subscription ? PLAN_CONFIGS[user.subscription.plan] : null;
   const sub = user.subscription;
 
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
   const [
     consultantsCount,
     jobsRunning,
@@ -37,6 +42,8 @@ export default async function DashboardPage() {
     recentAlerts,
     last7DaysMessages,
     topJobs,
+    sentToday,
+    receivedToday,
   ] = await Promise.all([
     prisma.consultant.count({ where: { userId: user.id, isActive: true } }),
     prisma.job.count({ where: { userId: user.id, status: "RUNNING" } }),
@@ -66,7 +73,43 @@ export default async function DashboardPage() {
       },
       take: 5,
     }),
+    prisma.message.count({
+      where: {
+        direction: "OUTBOUND",
+        sentAt: { gte: startOfToday },
+        conversation: { lead: { job: { userId: user.id } } },
+      },
+    }),
+    prisma.message.count({
+      where: {
+        direction: "INBOUND",
+        sentAt: { gte: startOfToday },
+        conversation: { lead: { job: { userId: user.id } } },
+      },
+    }),
   ]);
+
+  // Estado do onboarding (pra wizard de 4 passos)
+  const [hasChannel, listsCount, jobsCount] = await Promise.all([
+    Promise.all([
+      prisma.whatsAppSession.findFirst({
+        where: { userId: user.id, status: "CONNECTED" },
+        select: { id: true },
+      }),
+      prisma.emailAccount.findFirst({
+        where: { userId: user.id, isActive: true },
+        select: { id: true },
+      }),
+    ]).then(([wa, em]) => !!(wa || em)),
+    prisma.contactList.count({ where: { userId: user.id } }),
+    prisma.job.count({ where: { userId: user.id } }),
+  ]);
+  const onboardingState = {
+    hasConsultant: consultantsCount > 0,
+    hasChannel,
+    hasList: listsCount > 0,
+    hasJob: jobsCount > 0,
+  };
 
   const hotLeads = leadCounts.find((l) => l.status === "HOT")?._count ?? 0;
   const warmLeads = leadCounts.find((l) => l.status === "WARM")?._count ?? 0;
@@ -113,6 +156,9 @@ export default async function DashboardPage() {
         }
       />
 
+      {/* Onboarding wizard — some quando todos os 4 passos estão completos */}
+      <OnboardingWizard state={onboardingState} />
+
       {/* Plano */}
       {plan && sub && (
         <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-brand-50/40 shadow-sm overflow-hidden">
@@ -152,6 +198,27 @@ export default async function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Atividade de hoje — destaque pra dar sensação de "está acontecendo agora" */}
+      <div className="rounded-2xl border border-brand-200 bg-brand-50/40 px-6 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-success-500 opacity-75 animate-ping" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-success-500" />
+            </span>
+            <p className="text-sm font-semibold text-slate-900">Atividade de hoje</p>
+            <span className="text-xs text-slate-500">
+              · {new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-6">
+            <DayCounter label="Enviadas" value={sentToday} tone="brand" />
+            <DayCounter label="Recebidas" value={receivedToday} tone="success" />
+            <DayCounter label="Quentes" value={hotLeads} tone="danger" />
+          </div>
+        </div>
+      </div>
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
@@ -241,6 +308,9 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
+      {/* Feed ao vivo */}
+      <ActivityFeed />
+
       {/* Top jobs */}
       {sortedTopJobs.length > 0 && (
         <Card>
@@ -274,19 +344,6 @@ export default async function DashboardPage() {
         </Card>
       )}
 
-      {consultantsCount === 0 && (
-        <div className="rounded-2xl border border-dashed border-brand-300 bg-brand-50/40 p-8 text-center">
-          <h3 className="text-lg font-semibold text-slate-900">
-            Comece criando seu primeiro consultor
-          </h3>
-          <p className="mt-1 text-sm text-slate-600">
-            O consultor é quem vai conversar com seus leads. Configure-o em 2 minutos.
-          </p>
-          <Button asChild variant="primary" className="mt-5">
-            <Link href="/painel/consultores/novo">Criar consultor</Link>
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
@@ -296,6 +353,29 @@ function Detail({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs font-medium uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-1.5 text-2xl font-bold text-slate-900 tabular">{value}</p>
+    </div>
+  );
+}
+
+function DayCounter({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "brand" | "success" | "danger";
+}) {
+  const color =
+    tone === "danger"
+      ? "text-danger-700"
+      : tone === "success"
+        ? "text-success-700"
+        : "text-brand-700";
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <p className={`text-xl font-bold tabular ${color}`}>{value}</p>
+      <p className="text-xs text-slate-500">{label}</p>
     </div>
   );
 }

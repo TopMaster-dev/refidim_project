@@ -3,6 +3,8 @@ import { prisma, Channel, MessageDirection, MessageSender, LeadStatus } from "@r
 import { OPT_OUT_KEYWORDS } from "@refidim/shared";
 import { logger } from "../logger.js";
 import { generateAndSendReply } from "../ai/reply.js";
+import { detectAutoReply } from "../ai/bot-detector.js";
+import { handleSuspectedBot, resetBotStreak } from "../ai/bot-handler.js";
 
 /**
  * Processa uma mensagem recebida via WhatsApp.
@@ -109,7 +111,9 @@ export async function handleIncomingMessage(
       },
     }));
 
-  // Persiste a mensagem
+  // Detecta possível autoresponder/bot antes de persistir (pra registrar metadata)
+  const botCheck = detectAutoReply(text);
+
   await prisma.message.create({
     data: {
       conversationId: conversation.id,
@@ -120,6 +124,9 @@ export async function handleIncomingMessage(
         messageId: msg.key?.id ?? null,
         timestamp: msg.messageTimestamp?.toString() ?? null,
         remoteJid,
+        suspectedBot: botCheck.isLikelyBot,
+        botConfidence: botCheck.confidence,
+        botReasons: botCheck.reasons,
       },
     },
   });
@@ -129,10 +136,31 @@ export async function handleIncomingMessage(
     data: { lastMessageAt: new Date() },
   });
 
-  // Detecta opt-out
+  // Opt-out tem prioridade absoluta
   if (isOptOut(text)) {
     await handleOptOut(lead.id, contact.id, sock, remoteJid);
     return;
+  }
+
+  // Loop com autoresponder: 2+ mensagens automáticas consecutivas → pausa IA
+  if (botCheck.isLikelyBot) {
+    const { shouldPause } = await handleSuspectedBot({
+      conversationId: conversation.id,
+      leadId: lead.id,
+      userId,
+      reason: botCheck.reasons.join("; "),
+    });
+    if (shouldPause) {
+      logger.info(
+        { remoteJid, reasons: botCheck.reasons },
+        "🤖 WhatsApp: 2+ respostas automáticas — IA pausada"
+      );
+      return;
+    }
+    logger.info({ remoteJid }, "🤖 WhatsApp: 1ª possível automação — tentando mais uma");
+    // continua → reply normal
+  } else {
+    await resetBotStreak(conversation.id);
   }
 
   // Dispara resposta da IA (assíncrono, não bloqueia)
