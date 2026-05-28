@@ -41,17 +41,34 @@ export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
   );
   const [isPending, startTransition] = useTransition();
 
+  // Timestamp do último click em "Conectar" — usado pra manter polling ativo
+  // mesmo se o DB transitar pra DISCONNECTED brevemente (race com worker).
+  // Sem isso o polling parava quando local state caía pra DISCONNECTED, e o
+  // CONNECTED subsequente nunca era detectado (user tinha que F5).
+  const [connectingSince, setConnectingSince] = useState<number | null>(null);
+
   useEffect(() => {
-    const polling = ["CONNECTING", "QR_PENDING"].includes(session.status);
+    const recentlyConnecting =
+      connectingSince !== null && Date.now() - connectingSince < 5 * 60_000;
+    const polling =
+      ["CONNECTING", "QR_PENDING"].includes(session.status) || recentlyConnecting;
     if (!polling) return;
+
     const id = setInterval(async () => {
       try {
         const res = await fetch("/api/whatsapp/status", { cache: "no-store" });
-        if (res.ok) setSession((await res.json()) as SessionData);
+        if (res.ok) {
+          const data = (await res.json()) as SessionData;
+          setSession(data);
+          // Parou definitivamente — limpa o intent flag
+          if (data.status === "CONNECTED" || data.status === "BANNED") {
+            setConnectingSince(null);
+          }
+        }
       } catch {}
     }, 2000);
     return () => clearInterval(id);
-  }, [session.status]);
+  }, [session.status, connectingSince]);
 
   const cfg = STATUS_BADGE[session.status];
 
@@ -86,6 +103,7 @@ export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
             onConnect={() =>
               startTransition(async () => {
                 await connectWhatsAppAction();
+                setConnectingSince(Date.now());
                 setSession({ ...session, status: "CONNECTING" });
               })
             }
@@ -98,6 +116,7 @@ export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
                 )
                   return;
                 await switchWhatsAppNumberAction();
+                setConnectingSince(Date.now());
                 setSession({
                   ...session,
                   status: "CONNECTING",
@@ -154,7 +173,29 @@ export function WhatsAppPanel({ initial }: { initial: SessionData | null }) {
           />
         )}
 
-        {session.status === "BANNED" && <Banned />}
+        {session.status === "BANNED" && (
+          <Banned
+            pending={isPending}
+            onClearSession={() =>
+              startTransition(async () => {
+                if (
+                  !confirm(
+                    "Limpar credenciais do número banido? Você precisará conectar um número novo (aquecido) e escanear o QR."
+                  )
+                )
+                  return;
+                await disconnectWhatsAppAction(true);
+                setSession({
+                  status: "DISCONNECTED",
+                  qrCode: null,
+                  phoneNumber: null,
+                  lastConnectedAt: null,
+                  hasStoredAuth: false,
+                });
+              })
+            }
+          />
+        )}
       </CardContent>
     </Card>
   );
@@ -369,14 +410,34 @@ function Connected({
   );
 }
 
-function Banned() {
+function Banned({ pending, onClearSession }: { pending: boolean; onClearSession: () => void }) {
   return (
-    <div className="rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-900">
-      <p className="font-semibold">Este número foi bloqueado pelo WhatsApp.</p>
-      <p className="mt-1">
-        Limpe a sessão e use outro número. Para reduzir risco: use número aquecido, respeite delays
-        e evite envios em massa idênticos.
-      </p>
+    <div className="space-y-4">
+      <div className="rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-900">
+        <p className="font-semibold">Este número foi bloqueado pelo WhatsApp.</p>
+        <p className="mt-1">
+          Limpe a sessão e use outro número. Para reduzir risco: use número aquecido, respeite delays
+          e evite envios em massa idênticos.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h4 className="font-semibold text-slate-900">Como sair desse estado</h4>
+        <ol className="mt-2 space-y-1 text-sm text-slate-700">
+          <li><strong>1.</strong> Clique em <strong>Limpar sessão e trocar de número</strong> abaixo</li>
+          <li><strong>2.</strong> Conecte um <strong>número aquecido novo</strong> (~2 semanas de uso pessoal)</li>
+          <li><strong>3.</strong> Não reutilize o chip banido — fica marcado pelo WhatsApp</li>
+        </ol>
+        <Button
+          variant="destructive"
+          size="lg"
+          className="mt-4"
+          onClick={onClearSession}
+          disabled={pending}
+        >
+          {pending ? "Limpando…" : "Limpar sessão e trocar de número"}
+        </Button>
+      </div>
     </div>
   );
 }

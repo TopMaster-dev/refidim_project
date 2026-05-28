@@ -47,7 +47,7 @@ export function PainelShell({
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Sidebar desktop (fixa) */}
-      <div className="hidden lg:block">
+      <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:block">
         <PainelSidebar userName={userName} userEmail={userEmail} unreadAlerts={unreadAlerts} />
       </div>
 

@@ -35,10 +35,11 @@ export function stopWhatsAppManager() {
   }
 }
 
-// Tempo mínimo desde a última atualização antes de considerar reiniciar uma
-// sessão CONNECTED sem socket — evita race com close handler que pode estar
-// rodando em paralelo e ainda não atualizou o DB para DISCONNECTED.
-const CONNECTED_RESTART_MIN_AGE_MS = 30_000;
+// Tempo mínimo desde a última atualização antes de reiniciar uma sessão
+// CONNECTED sem socket. 5s é suficiente pra evitar race com close handler
+// (que costuma terminar em ms). Antes era 30s, o que deixava trabalhos sem
+// dispararem por até 30s após restart do worker.
+const CONNECTED_RESTART_MIN_AGE_MS = 5_000;
 
 async function tick() {
   const all = await prisma.whatsAppSession.findMany({

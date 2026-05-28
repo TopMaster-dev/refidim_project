@@ -9,9 +9,10 @@ import {
 import { logger } from "../logger.js";
 import { hasAIProvider, getAIProvider } from "./provider.js";
 import { buildSystemPrompt } from "./prompt.js";
-import { isSessionActive } from "../whatsapp/service.js";
+import { isSessionActive, startSession } from "../whatsapp/service.js";
 import { scheduleWhatsAppSend } from "../whatsapp/sender.js";
 import { scheduleEmailSend } from "../email/sender.js";
+import { WhatsAppStatus } from "@refidim/database";
 
 const POLL_INTERVAL_MS = 15_000; // 15s — pega leads novos rápido, dá sensação de "ao vivo"
 const BATCH_PER_TICK = 5; // até 5 aberturas por tick por trabalho
@@ -89,8 +90,29 @@ async function processJobOpenings(
 
   const remaining = Math.min(BATCH_PER_TICK, job.dailyLimit - sentToday);
 
-  // WhatsApp precisa de sessão ativa
+  // WhatsApp precisa de sessão ativa (socket em memória).
+  // Se o DB diz CONNECTED mas memória está vazia (= worker reiniciou e ainda
+  // não rehidratou), dispara startSession AGORA pra acelerar — sem isso o
+  // trabalho silenciosamente não disparava nada.
   if (job.channel === Channel.WHATSAPP && !isSessionActive(job.userId)) {
+    const dbSess = await prisma.whatsAppSession.findUnique({
+      where: { userId: job.userId },
+      select: { status: true },
+    });
+    if (dbSess?.status === WhatsAppStatus.CONNECTED) {
+      logger.warn(
+        { jobId: job.id, userId: job.userId },
+        "Trabalho WhatsApp mas sessão não está em memória — disparando reconexão"
+      );
+      startSession(job.userId).catch((err) =>
+        logger.error({ err, userId: job.userId }, "Falha ao rehidratar WhatsApp")
+      );
+    } else {
+      logger.info(
+        { jobId: job.id, userId: job.userId, dbStatus: dbSess?.status ?? "no-row" },
+        "Opener: WhatsApp não conectado — pulando este tick"
+      );
+    }
     return;
   }
 

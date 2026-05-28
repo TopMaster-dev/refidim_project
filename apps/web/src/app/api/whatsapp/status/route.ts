@@ -4,8 +4,11 @@ import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-// Quanto tempo até considerar CONNECTING/QR_PENDING como travado (worker offline)
-const STALE_MS = 60_000;
+// Quanto tempo até considerar CONNECTING como travado (worker offline).
+// QR_PENDING NÃO entra no reset porque é o estado de "esperando usuário
+// escanear" — pode legitimamente durar minutos. O bug anterior era resetar
+// QR_PENDING depois de 60s e a UI cair em DISCONNECTED ainda durante a scan.
+const STALE_CONNECTING_MS = 3 * 60_000; // 3 minutos
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -13,13 +16,14 @@ export async function GET() {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // Reset preventivo: se polling detectar sessão CONNECTING/QR_PENDING sem
-  // movimento há mais de 60s, considera worker offline e libera o estado.
-  const cutoff = new Date(Date.now() - STALE_MS);
+  // Reset preventivo SÓ pra CONNECTING travado (worker offline).
+  // QR_PENDING é deixado em paz — o worker é quem move pra CONNECTED quando
+  // o usuário scaneia, ou pra DISCONNECTED se o QR expira.
+  const cutoff = new Date(Date.now() - STALE_CONNECTING_MS);
   await prisma.whatsAppSession.updateMany({
     where: {
       userId: user.id,
-      status: { in: [WhatsAppStatus.CONNECTING, WhatsAppStatus.QR_PENDING] },
+      status: WhatsAppStatus.CONNECTING,
       updatedAt: { lt: cutoff },
     },
     data: { status: WhatsAppStatus.DISCONNECTED, qrCode: null },
