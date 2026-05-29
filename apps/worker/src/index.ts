@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { prisma } from "@refidim/database";
 import { logger } from "./logger.js";
 import { initRedis, shutdownRedis } from "./queues.js";
 import { startWhatsAppManager, stopWhatsAppManager } from "./whatsapp/manager.js";
@@ -9,6 +10,16 @@ import { hasAIProvider } from "./ai/provider.js";
 import { startHumanDispatcher, stopHumanDispatcher } from "./human-dispatcher.js";
 import { startExtractor, stopExtractor } from "./extractor/google-places.js";
 import { startReplyRecovery, stopReplyRecovery } from "./ai/reply-recovery.js";
+
+// Sem esses handlers, qualquer Promise rejected não-capturada matava o worker
+// silenciosamente. Auditoria 28/05 identificou várias fontes potenciais
+// (saveCreds, scheduleEmailSend, etc) onde rejections podiam escapar.
+process.on("uncaughtException", (err) => {
+  logger.error({ err }, "⚠️ uncaughtException — worker continuando, mas isso é bug");
+});
+process.on("unhandledRejection", (reason) => {
+  logger.error({ reason: String(reason) }, "⚠️ unhandledRejection — worker continuando");
+});
 
 async function bootstrap() {
   logger.info("🚀 Refidim worker iniciando...");
@@ -56,6 +67,13 @@ const shutdown = async (signal: string) => {
   stopHumanDispatcher();
   stopExtractor();
   await shutdownRedis();
+  // Auditoria 28/05: Prisma não tinha shutdown limpo → connections ficavam
+  // pendentes no Postgres ao restart, comendo do pool em deploys/restarts.
+  try {
+    await prisma.$disconnect();
+  } catch (err) {
+    logger.warn({ err }, "Erro ao desconectar Prisma (ignorando)");
+  }
   process.exit(0);
 };
 

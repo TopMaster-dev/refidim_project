@@ -42,6 +42,27 @@ function randomDelayMs(): number {
 
 const userQueues = new Map<string, Promise<void>>();
 
+// Hard timeout por tentativa de envio. Cobre AI gen + delay + sock.sendMessage.
+// Sem isso, uma promise travada (sock dead, OpenAI hang) ficava no Map pra sempre,
+// segurando closure com args (memory leak). Auditoria 28/05.
+const SEND_HARD_TIMEOUT_MS = 90_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timeout >${ms}ms`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      }
+    );
+  });
+}
+
 /**
  * Enfileira um envio respeitando janela horária e delay humano.
  * Encadeia os envios POR USUÁRIO (um por vez) para simular um humano digitando.
@@ -58,13 +79,22 @@ export async function scheduleWhatsAppSend(args: {
   const { userId } = args;
   const previous = userQueues.get(userId) ?? Promise.resolve();
 
-  const next = previous.then(() => performSend(args));
+  // performSend dorme até janela horária (pode ser horas). Não wrap a operação
+  // inteira com timeout — wrap só o ENVIO REAL (em performSend, ver sock.sendMessage).
+  // Aqui o timeout cobre a chain inteira como fallback de último recurso pra
+  // garantir cleanup do Map. 24h de janela cobre o pior caso (overnight).
+  const next = withTimeout(
+    previous.then(() => performSend(args)),
+    24 * 60 * 60 * 1000,
+    `WhatsApp queue user=${userId}`
+  );
   userQueues.set(userId, next);
 
-  // Limpa quando termina, sem propagar erro pra próxima
-  next.catch((err) => logger.error({ err, userId }, "Falha no envio WhatsApp")).finally(() => {
-    if (userQueues.get(userId) === next) userQueues.delete(userId);
-  });
+  next
+    .catch((err) => logger.error({ err: String(err), userId }, "Falha no envio WhatsApp"))
+    .finally(() => {
+      if (userQueues.get(userId) === next) userQueues.delete(userId);
+    });
 }
 
 async function performSend(args: {
@@ -107,9 +137,15 @@ async function performSend(args: {
     },
   });
 
-  // 5. Envia
+  // 5. Envia com timeout duro — sock.sendMessage pode hangar se Baileys está
+  // num estado ruim (socket morto não detectado, reconnect em curso).
+  // Auditoria 28/05 mostrou que sem timeout aqui, userQueues vazava.
   try {
-    const result = await sendText(userId, to, text);
+    const result = await withTimeout(
+      sendText(userId, to, text),
+      SEND_HARD_TIMEOUT_MS,
+      `sendText user=${userId}`
+    );
     if (result?.messageId) {
       await prisma.message.update({
         where: { id: stored.id },

@@ -19,6 +19,10 @@ const POLL_INTERVAL_MS = 30_000;
 interface ActiveConnection {
   client: ImapFlow;
   interval: NodeJS.Timeout;
+  // Ref nomeada do handler de error pra podermos remover via .off() depois.
+  // Sem isso cada reconexão (que acontece a cada 5-15min em IMAP do Gmail)
+  // deixava listener orfão no client morto — em 24h, dezenas vazavam.
+  errorHandler: (err: Error) => void;
 }
 
 const connections = new Map<string, ActiveConnection>();
@@ -59,22 +63,28 @@ export async function startImapForAccount(account: EmailAccount): Promise<void> 
     return;
   }
 
-  client.on("error", (err) => {
+  // Handler nomeado pra podermos remover via client.off() em stopImapForAccount
+  // e quando o watchdog força reconnect.
+  const errorHandler = (err: Error) => {
     logger.error({ err, accountId: account.id }, "IMAP socket error");
     const c = connections.get(account.id);
     if (c) {
       clearInterval(c.interval);
+      try {
+        c.client.off("error", c.errorHandler);
+      } catch {
+        // ignora
+      }
       connections.delete(account.id);
     }
-  });
+  };
+  client.on("error", errorHandler);
 
   let running = false;
   let runningSince = 0;
   const STUCK_THRESHOLD_MS = 2 * 60 * 1000;
 
   const tick = async () => {
-    // Watchdog: se um tick está rodando há mais de 2min sem terminar,
-    // o socket provavelmente está pendurado sem dar erro. Força reconnect.
     if (running && Date.now() - runningSince > STUCK_THRESHOLD_MS) {
       logger.warn(
         { accountId: account.id, stuckMs: Date.now() - runningSince },
@@ -83,7 +93,20 @@ export async function startImapForAccount(account: EmailAccount): Promise<void> 
       const c = connections.get(account.id);
       if (c) {
         clearInterval(c.interval);
+        try {
+          c.client.off("error", c.errorHandler);
+        } catch {
+          // ignora
+        }
         connections.delete(account.id);
+      }
+      try {
+        // Tenta logout limpo primeiro (fecha TLS socket corretamente),
+        // depois close como fallback. Auditoria 28/05: client.close()
+        // sozinho podia deixar socket TCP zumbi.
+        await client.logout().catch(() => {});
+      } catch {
+        // ignora
       }
       try {
         client.close();
@@ -98,8 +121,6 @@ export async function startImapForAccount(account: EmailAccount): Promise<void> 
     try {
       await checkNewMessages(account, client);
     } catch (err) {
-      // "Connection not available" é eco do socket já morto — já logamos como
-      // "IMAP socket error". Evita ruído duplicado.
       if ((err as { code?: string })?.code !== "NoConnection") {
         logger.error({ err, accountId: account.id }, "Erro no IMAP poll");
       }
@@ -109,7 +130,7 @@ export async function startImapForAccount(account: EmailAccount): Promise<void> 
   };
 
   const interval = setInterval(tick, POLL_INTERVAL_MS);
-  connections.set(account.id, { client, interval });
+  connections.set(account.id, { client, interval, errorHandler });
 
   // Tick inicial após pequeno delay
   setTimeout(tick, 2000);
@@ -119,6 +140,12 @@ export async function stopImapForAccount(accountId: string): Promise<void> {
   const c = connections.get(accountId);
   if (!c) return;
   clearInterval(c.interval);
+  // Remove listener ANTES de logout pra evitar callback ser disparado durante shutdown
+  try {
+    c.client.off("error", c.errorHandler);
+  } catch {
+    // ignora
+  }
   try {
     await c.client.logout();
   } catch {

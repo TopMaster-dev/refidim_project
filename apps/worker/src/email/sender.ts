@@ -60,10 +60,29 @@ function getTransporter(account: EmailAccount): Transporter {
       pool: true,
       maxConnections: 1,
       rateLimit: 1,
+      // Timeouts: sem isso o nodemailer abre conexão TCP e fica esperando
+      // resposta SMTP indefinidamente se o servidor congelar. Auditoria 28/05.
+      connectionTimeout: 30_000,
+      socketTimeout: 60_000,
+      greetingTimeout: 30_000,
     });
     transporters.set(account.id, t);
   }
   return t;
+}
+
+// Hard timeout pra qualquer operação no transporter (sendMail pode hangar
+// se servidor SMTP fica mute mesmo com socketTimeout configurado).
+const SMTP_HARD_TIMEOUT_MS = 90_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timeout >${ms}ms`)), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
 }
 
 export function clearTransporterCache(accountId?: string) {
@@ -142,14 +161,18 @@ async function dispatchStored(
 
   try {
     const transporter = getTransporter(account);
-    const info = await transporter.sendMail({
-      from: { name: account.fromName, address: account.fromEmail },
-      to: args.to,
-      subject: args.subject,
-      text: args.body,
-      inReplyTo: args.inReplyTo,
-      references: args.references,
-    });
+    const info = await withTimeout(
+      transporter.sendMail({
+        from: { name: account.fromName, address: account.fromEmail },
+        to: args.to,
+        subject: args.subject,
+        text: args.body,
+        inReplyTo: args.inReplyTo,
+        references: args.references,
+      }),
+      SMTP_HARD_TIMEOUT_MS,
+      `sendMail to=${args.to}`
+    );
 
     await prisma.message.update({
       where: { id: messageId },

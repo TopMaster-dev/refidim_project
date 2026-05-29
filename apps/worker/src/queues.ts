@@ -33,8 +33,17 @@ export async function initRedis(): Promise<boolean> {
       retryStrategy: () => null,
     });
 
-    // Silencia erros de conexão — vamos verificar via try/catch abaixo
-    conn.on("error", () => {});
+    // Auditoria 28/05: handler vazio escondia reconnect storms — em horas/dias
+    // de uso, ioredis podia entrar em loop de reconexão silencioso, abrindo FDs.
+    // Throttle: loga no máximo 1 erro a cada 30s pra não inundar.
+    let lastErrLog = 0;
+    conn.on("error", (err: Error) => {
+      const now = Date.now();
+      if (now - lastErrLog > 30_000) {
+        lastErrLog = now;
+        logger.warn({ err: err.message, code: (err as { code?: string }).code }, "Redis error (throttled)");
+      }
+    });
 
     await conn.connect();
     await conn.ping();

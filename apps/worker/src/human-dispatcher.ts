@@ -109,29 +109,43 @@ async function dispatchMessage(
 
     const { decryptSecret } = await import("@refidim/shared");
     const nodemailer = (await import("nodemailer")).default;
+    // Auditoria 28/05: este transporter era criado a cada envio manual e
+    // NUNCA fechado — vazava TCP socket por envio. Adicionados timeouts
+    // + transporter.close() em finally pra garantir cleanup.
     const transporter = nodemailer.createTransport({
       host: account.smtpHost,
       port: account.smtpPort,
       secure: account.smtpPort === 465,
       auth: { user: account.smtpUser, pass: decryptSecret(account.smtpPassEnc) },
+      connectionTimeout: 30_000,
+      socketTimeout: 60_000,
+      greetingTimeout: 30_000,
     });
-    const info = await transporter.sendMail({
-      from: { name: account.fromName, address: account.fromEmail },
-      to: lead.contact.email,
-      subject: "Continuação",
-      text: body,
-    });
-    await prisma.message.update({
-      where: { id: msg.id },
-      data: {
-        metadata: {
-          ...(typeof msg.metadata === "object" && msg.metadata !== null ? msg.metadata : {}),
-          pendingDispatch: false,
-          messageId: info.messageId,
-          accountId: account.id,
+    try {
+      const info = await transporter.sendMail({
+        from: { name: account.fromName, address: account.fromEmail },
+        to: lead.contact.email,
+        subject: "Continuação",
+        text: body,
+      });
+      await prisma.message.update({
+        where: { id: msg.id },
+        data: {
+          metadata: {
+            ...(typeof msg.metadata === "object" && msg.metadata !== null ? msg.metadata : {}),
+            pendingDispatch: false,
+            messageId: info.messageId,
+            accountId: account.id,
+          },
         },
-      },
-    });
-    logger.info({ msgId: msg.id, channel: "EMAIL" }, "👤 Mensagem HUMAN enviada");
+      });
+      logger.info({ msgId: msg.id, channel: "EMAIL" }, "👤 Mensagem HUMAN enviada");
+    } finally {
+      try {
+        transporter.close();
+      } catch {
+        // ignora — pode já estar fechado
+      }
+    }
   }
 }

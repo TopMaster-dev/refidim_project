@@ -7,6 +7,7 @@ import {
   type SignalDataTypeMap,
 } from "@whiskeysockets/baileys";
 import { prisma } from "@refidim/database";
+import { logger } from "../logger.js";
 
 /**
  * Persiste credenciais e keys do Baileys em WhatsAppSession.authState (Json no Postgres).
@@ -35,13 +36,36 @@ export async function usePostgresAuthState(userId: string): Promise<{
   const keys: Record<string, Record<string, unknown>> = parsed?.keys ?? {};
 
   const persist = async () => {
-    const serialized = JSON.parse(
-      JSON.stringify({ creds, keys }, BufferJSON.replacer)
-    );
-    await prisma.whatsAppSession.update({
-      where: { userId },
-      data: { authState: serialized },
-    });
+    try {
+      const serialized = JSON.parse(
+        JSON.stringify({ creds, keys }, BufferJSON.replacer)
+      );
+      await prisma.whatsAppSession.update({
+        where: { userId },
+        data: { authState: serialized },
+      });
+    } catch (err) {
+      // CRÍTICO: sem catch, uma falha aqui (Postgres pool esgotado, query
+      // travada) virava unhandledRejection e matava o worker. Auditoria 28/05.
+      logger.error({ err, userId }, "Falha ao persistir credenciais WhatsApp");
+    }
+  };
+
+  // Debounce: Baileys emite creds.update 5-50x/h durante sync de chaves Signal.
+  // Sem throttle, eram 5-50 prisma.update() por hora, saturando o pool de conexões
+  // do Postgres em horas. Coalescimos chamadas próximas (3s) em uma só persistência.
+  // Auditoria 28/05.
+  let saveTimer: NodeJS.Timeout | null = null;
+  let savePending = false;
+  const debouncedPersist = async () => {
+    savePending = true;
+    if (saveTimer) return;
+    saveTimer = setTimeout(async () => {
+      saveTimer = null;
+      if (!savePending) return;
+      savePending = false;
+      await persist();
+    }, 3000);
   };
 
   return {
@@ -82,10 +106,13 @@ export async function usePostgresAuthState(userId: string): Promise<{
               }
             }
           }
-          await persist();
+          // Use debounced — auditoria mostrou que set() é chamado dezenas de
+          // vezes por mensagem recebida (signal protocol), antes era 1 prisma.update
+          // por chamada → DB saturação. Agora 1 update a cada 3s.
+          await debouncedPersist();
         },
       },
     },
-    saveCreds: persist,
+    saveCreds: debouncedPersist,
   };
 }

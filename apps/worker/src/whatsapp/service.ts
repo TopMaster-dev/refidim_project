@@ -11,12 +11,32 @@ import { logger } from "../logger.js";
 import { usePostgresAuthState } from "./auth-state.js";
 import { handleIncomingMessage } from "./inbound.js";
 
+interface SessionHandlers {
+  credsUpdate: (...args: unknown[]) => unknown;
+  connectionUpdate: (...args: unknown[]) => unknown;
+  messagesUpsert: (...args: unknown[]) => unknown;
+}
+
 interface ActiveSession {
   socket: WASocket;
   userId: string;
+  // Refs nomeadas pros listeners — sem isso não conseguimos remover via .off()
+  // e cada reconexão deixa listeners orfãos no event emitter (memory leak
+  // identificado pela auditoria 28/05).
+  handlers: SessionHandlers;
 }
 
 const sessions = new Map<string, ActiveSession>();
+
+function unregisterSocketListeners(sock: WASocket, handlers: SessionHandlers) {
+  try {
+    sock.ev.off("creds.update", handlers.credsUpdate);
+    sock.ev.off("connection.update", handlers.connectionUpdate);
+    sock.ev.off("messages.upsert", handlers.messagesUpsert);
+  } catch {
+    // ignora erros de remoção (ev pode já estar destruído)
+  }
+}
 
 const baileysLogger = pino({ level: "silent" });
 
@@ -50,12 +70,17 @@ export async function startSession(userId: string): Promise<void> {
       markOnlineOnConnect: false,
     });
 
-    sessions.set(userId, { socket: sock, userId });
+    // Handlers nomeados — armazenados pra podermos remover via .off() depois.
+    // Auditoria 28/05: sem isso cada reconexão deixava 3 listeners orfãos no
+    // EventEmitter do Baileys (em 24h com 50 reconnects = 150 closures vivos).
+    const credsUpdateHandler = saveCreds as (...args: unknown[]) => unknown;
 
-    sock.ev.on("creds.update", saveCreds);
-
-    sock.ev.on("connection.update", async (update) => {
-      const { connection, lastDisconnect, qr } = update;
+    const connectionUpdateHandler = async (update: Parameters<Parameters<typeof sock.ev.on>[1]>[0]): Promise<void> => {
+      const { connection, lastDisconnect, qr } = update as {
+        connection?: string;
+        lastDisconnect?: { error?: unknown };
+        qr?: string;
+      };
 
       if (qr) {
         const dataUrl = await QRCode.toDataURL(qr, { width: 300, margin: 1 });
@@ -83,8 +108,6 @@ export async function startSession(userId: string): Promise<void> {
       if (connection === "close") {
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
 
-        // connectionReplaced (440): outro device autenticou na mesma conta.
-        // Reconectar agressivamente causa loop infinito de kicks.
         const isReplaced = statusCode === DisconnectReason.connectionReplaced;
 
         const shouldReconnect =
@@ -92,6 +115,12 @@ export async function startSession(userId: string): Promise<void> {
           statusCode !== DisconnectReason.badSession &&
           !isReplaced;
 
+        // CRÍTICO: remover listeners ANTES de deletar a sessão. Sem isso os
+        // 3 listeners ficam pendurados no sock.ev (que persiste em memória até GC).
+        const existing = sessions.get(userId);
+        if (existing) {
+          unregisterSocketListeners(existing.socket, existing.handlers);
+        }
         sessions.delete(userId);
 
         await prisma.whatsAppSession.update({
@@ -113,7 +142,6 @@ export async function startSession(userId: string): Promise<void> {
             : "WhatsApp desconectado"
         );
 
-        // Reconexão automática apenas se não foi logout intencional nem connectionReplaced
         if (shouldReconnect) {
           setTimeout(() => {
             startSession(userId).catch((err) =>
@@ -122,18 +150,36 @@ export async function startSession(userId: string): Promise<void> {
           }, 5000);
         }
       }
-    });
+    };
 
-    sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    const messagesUpsertHandler = async ({
+      messages,
+      type,
+    }: {
+      messages: unknown[];
+      type: string;
+    }): Promise<void> => {
       if (type !== "notify") return;
       for (const msg of messages) {
         try {
-          await handleIncomingMessage(userId, sock, msg);
+          await handleIncomingMessage(userId, sock, msg as never);
         } catch (err) {
           logger.error({ err, userId }, "Erro processando mensagem inbound");
         }
       }
-    });
+    };
+
+    const handlers: SessionHandlers = {
+      credsUpdate: credsUpdateHandler,
+      connectionUpdate: connectionUpdateHandler as (...args: unknown[]) => unknown,
+      messagesUpsert: messagesUpsertHandler as (...args: unknown[]) => unknown,
+    };
+
+    sessions.set(userId, { socket: sock, userId, handlers });
+
+    sock.ev.on("creds.update", handlers.credsUpdate);
+    sock.ev.on("connection.update", handlers.connectionUpdate);
+    sock.ev.on("messages.upsert", handlers.messagesUpsert);
 
     logger.info({ userId }, "WhatsApp session iniciada");
   } catch (err) {
@@ -152,6 +198,9 @@ export async function startSession(userId: string): Promise<void> {
 export async function stopSession(userId: string, logout = false): Promise<void> {
   const session = sessions.get(userId);
   if (session) {
+    // Remove listeners primeiro pra evitar disparos durante o logout/end
+    // e pra garantir que listeners não vazem após sessão morrer.
+    unregisterSocketListeners(session.socket, session.handlers);
     try {
       if (logout) {
         await session.socket.logout();
